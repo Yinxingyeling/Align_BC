@@ -24,6 +24,8 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
 
     punct_faible = [",", ";", ":"]
 
+    mwt = ["du", "des", "au", "aux"]
+
     # LAS : Lettre ajouté et/ou supprimée
     las = [
         "e", "ees", "é", "ée", "ées", "ans", 
@@ -48,12 +50,20 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
         postagging = [] # -> postagging
 
         for sentence in doc.sentences :
+            word2token = {
+                w.id : tok 
+                for tok in sentence.tokens
+                for w in tok.words
+            }
+
             idx = 0
 
             while idx < len(sentence.words) :
                 word = sentence.words[idx]     
                 token = word.text
                 pos = word.pos
+
+                surface = word2token[word.id].text
 
                 # Test pour les exceptions des POS
                 if isinstance(token, str) and len(token) <= 3 :
@@ -66,13 +76,17 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
                         if token.lower() == "ses" and pos_ap == "NOUN" :
                             pos = "DET"
 
-                elif token in punct_faible :
-                    pos = "PUNCT_FAIBLE"
-                elif token in punct_fort :
-                    pos = "PUNCT_FORT"
-                elif token == "du" :
-                    pos = "DET"
+                    if token in punct_faible :
+                        pos = "PUNCT_FAIBLE"
+                    elif token in punct_fort :
+                        pos = "PUNCT_FORT"
                 
+                # Pour DET multi-word token français
+                if surface in mwt : 
+                    token = surface
+                    pos = "DET"
+                    idx += 1
+
                 # correction de certain pos=X 
                 if pos == "X" : 
                     if token == "a" :
@@ -84,7 +98,7 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
                         if pos_ap in ["ADV", "VERB", "ADJ"] and pos_complet == pos_ap :
                             pos = f"{pos_ap}_1"
                 # pos=X -> pos=POS_1, alors pos suivant -> pos=POS_2 (liaison)
-                if idx > 0 and postagging[-1] == f"{pos}_1" :
+                if postagging and postagging[-1] == f"{pos}_1" :
                     pos = f"{pos}_2"
                 
                 # Sauvegarde le tous dans les list
@@ -144,6 +158,6 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
     return dataframe
 
 chemin = "Align_BC/data/corpus"
-reader = read_corpus(filesFromFolder(chemin), column=["ID", "burst", "charBurst"])
+reader = read_corpus(filesFromFolder(chemin))
 test = postagging_for_df(reader)
-df2csv(test, "Align_BC/data/results4")
+df2csv(test, "Align_BC/data/results5")
