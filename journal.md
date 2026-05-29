@@ -153,6 +153,7 @@ CONJC - 'conjonction' <br>
     | e	        | ADP	    | NOUN  | souvent une révision : oublie des terminaison (e/s/es...) |
 
     - Après un test rapide entre `stanza` et `spacy`, nous pouvons voir que `stanza` est plus performant et pour la plupart des tokens, plus adapté pour notre corpus et le français. Ainsi, nous avons choisi de prendre le module `stanza` pour l'étiquetages de nos tokens.
+
 #### Amélioration
 * *emp* + *êcher* que `stanza` étiquète **X+VERB** $\rightarrow$ changer par **VERB-1** et **VERB-2** pour avoir la liaison entre les deux.
     - La segmentation est ainsi car ce sont deux burst différents, **Hypothèse 1** : une pause ici pour trouver la touche avec le **^** sur le clavier ? $\rightarrow$ vérifier l'hypothèse avec la durée de pause
@@ -176,3 +177,60 @@ CONJC - 'conjonction' <br>
 * Mise au propre du journal de bord et rédaction des décisions prises lors de la réunion 2. 
     - Ajout des quelques détails pour une meilleur compréhension du journal pour les camarades suivants.
 * Finaliser le script de postagging avec `stanza` en ajoutant les modifications mentionnées lors de la réunion 2.
+
+## Postagging avec stanza - 2 (26/05)
+- Vérification des tests à ajouté pour un POS plus précis et adapté au corpus.
+- LAS (selon la diapo *Analyse des données d’écriture en temps réel* — Amandine Jouvenel) voir diapo p. 27-48.
+- Utilisation de `explode` dans pandas : range chaque élément de la liste en un élément par ligne tout en répliquant les données des autres colonnes
+
+Problème :
+- sur Linux, le GPU n’est pas activé, il faut installer la carte NVIDIA et redémarrer l’ordinateur
+
+## Postagging avec stanza - 3 (27/05)
+* Définir les tokens à tagger LAS 
+* Détaillé le tag pour les ponctuations 
+    * punct_fort = [".", "!", "?"]
+    * punct_faible = [",", ";", ":"]
+
+## Postagging avec stanza - 4 (28/05)
+- Correction automatique pour les pos=X, si en collant le text A et le text B (A token mtn, B token suivant), leur POS est le même que le pos du B, alors on ajoute une liaison avec `pos_A=POS_1` et `pos_B=POS_2`
+- Après un premier test de la fonction `tok_stanza_for_df`, nous remarquons que le script prend plus de 2 minutes à traiter tous les documents, ainsi nous ajoutons une barre de progression avec le module `tqdm` au lieu de faire des plein de `print()` de progression.
+- Réorganisation des colonnes, dans les premiers tests, les nouvelles colonnes (token et pos) se trouve en toute fin, alors que nous les voulons juste après la colonne burst.
+
+## Correction des résultats de postagging (29/05)
+
+### Manuel d'utilisation (`df2csv`, `postagging_for_df`)
+- `df2csv` : Fonction de conversion DataFrame → csv/excel
+    - `corpus` : `pd.DataFrame` qui peut être crée avec `read_corpus`, `tok_stanza_for_df` et `chunking`.
+    - `path` : Fichier de sortie
+    - `column` : Affiche que les colonnes sélectionnées. Par défaut, toutes les colonnes
+    - `format` : Format de sortie, CSV ou Excel. Par défaut CSV.
+- `postagging_for_df` : postagging des bursts avec stanza
+    - `dataframe` : `pd.DataFrame` venant de `read_corpus`
+    - `new_column` : le nom des deux nouvelles colonnes. Par défaut : token et pos
+
+### Corrections
+- Correction de *a* tagger en LAS, alors que c’est un VERB
+    - comme *a* est en lui-même un burst, stanza ne le reconnaît pas → ajout d’un test pour corriger ce problème
+- Correction de l’emplacement des variables `tok` et `postagging` pour pouvoir accumuler toutes les phrases d’un burst
+    ![Version avant correction](img/tagging_av_corr.png)
+    * Ce qui est encadré en bleu sont les erreurs à corriger
+    ![Version après correction](img/tagging_ap_corr.png)
+- Le tag des ponctuations n’a pas été corrigé, l’imbracation des tests n’est pas bien fait
+- INTJ : l.34 “équent” n’est pas une interjection
+
+### Test à effectuer
+- [ ]  `df2csv()`
+    - [ ]  avec une sortie en excel
+    - [ ]  avec `column` sélectionné
+- [ ]  Vérifier dans la sortie si pour *du* le pos a bien changé et que le token n’a pas été divisé en deux ou que le deuxième token ne soit présent
+
+### A faire
+- [x]  Finaliser le script de postagging avec `stanza` en ajoutant les modifications mentionnées lors de la réunion 2. **(29/05)**
+- [ ]  Préparer les règles pour débuter le chunk avec nltk
+- [x]  Pour le test du POS=X, ajouter la transformation du pos suivant aussi → ex: VERB_2 **(28/05)**
+- [ ]  Vérifier la sortie de la fonction `df2csv`
+    - [x]  df **(29/05)**
+    - [ ]  dict → réécrire une fonction pour la conversion : prendre en compte, les token → list[token], pos = list[tuple(token, pos)] , chunk → list[ tuple(chunk, etiquette, syntaxique)]
+- [ ]  Write2Json : passer par la fonction df2dict pour avoir la sortie json comme voulu et non pas identique au csv → trop redondant, avec des doublons inutils
+- [ ]  Faire une fonction de filtre ⇒ choisir les pos ou token (chunk ?)
