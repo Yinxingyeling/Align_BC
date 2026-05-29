@@ -3,8 +3,6 @@
     Librairies : 
         - stanza
         - NLTK (chunk -> rule)
-        - spaCy
-        - SEM (https://github.com/YoannDupont/SEM/tree/master)
 """
 
 from read_write import *
@@ -14,7 +12,7 @@ from tqdm import tqdm
 
 def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "pos"])->pd.DataFrame :
     """
-        wordisation, lemmatisation, POS with stanza of burst
+        wordisation, POS with stanza of burst
     """
     use_gpu = False
     if torch.cuda.is_available() :
@@ -148,4 +146,4 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
 chemin = "Align_BC/data/corpus"
 reader = read_corpus(filesFromFolder(chemin), column=["ID", "burst", "charBurst"])
 test = postagging_for_df(reader)
-df2csv(test, "Align_BC/data/results4.csv")
+df2csv(test, "Align_BC/data/results4")

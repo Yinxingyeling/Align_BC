@@ -113,14 +113,22 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
         Transforme un DataFrame en fichier csv ou excel
     """
     if isinstance(column, str) :
-        column = [column]
+        column = [
+            col for col in column.split()
+            if col in dataframe.columns.tolist()
+        ]
 
     if format == "excel" :
+        path = path + ".xlsx"
         dataframe.to_excel(
             excel_writer=path,
             columns=column,
         )
- 
+
+        return f"Conversion fini. Fichier csv sauvegarder : {path}"
+
+    path = path + ".csv"
+    
     dataframe.to_csv(
         path_or_buf=path,
         columns=column,
@@ -128,4 +136,4 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
         index=False
     )
 
-    print(f"Conversion fini. Fichier csv sauvegarder : {path}")
+    return f"Conversion fini. Fichier csv sauvegarder : {path}"
