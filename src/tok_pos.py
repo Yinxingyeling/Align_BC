@@ -5,7 +5,7 @@
         - NLTK (chunk -> rule)
 """
 
-from read_write import *
+# from read_write import *
 import pandas as pd
 import stanza, torch
 from tqdm import tqdm
@@ -38,11 +38,13 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
         enumerate(dataframe["burst"]),
         total=len(dataframe),
         desc="POS tagging",
-        unit=" ligne") :
+        unit=" burst") :
 
         # Traitement des lignes d'espace/vide
         if pd.isna(burst) or str(burst).strip() == "":
-            dataframe.loc[i, "token"] = pd.NA
+            # dataframe.loc[i, "token"] = pd.NA
+            dataframe.loc[i, "token"] = ""
+            dataframe.loc[i, "pos"] = "" # laisser vide ?
             continue
 
         doc = nlp(str(burst))
@@ -67,13 +69,13 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
 
                 # Test pour les exceptions des POS
                 if isinstance(token, str) and len(token) <= 3 :
-                    if token.lower() in las or (len(token) == 1 and token not in ["y", "a"] and pos != "PUNCT") : # and (pos == "X" and token.lower() != "etc")
+                    if token.lower() in las or (len(token) == 1 and token not in ["y", "a", "à"] and pos != "PUNCT") : # and (pos == "X" and token.lower() != "etc")
                         pos = "LAS" 
                     if idx+1 < len(sentence.words) :
                         pos_ap = sentence.words[idx+1].pos
                         if token.lower() in ["es", "a"] and pos_ap in ["VERB", "ADJ", "NOUN", "ADV"] :
                             pos = "VERB"
-                        if token.lower() == "ses" and pos_ap == "NOUN" :
+                        if token.lower() in ["ses", "d'"] and pos_ap == "NOUN" :
                             pos = "DET"
 
                     if token in punct_faible :
@@ -134,7 +136,7 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
 
     for i in tqdm(range(len(dataframe)), 
         desc="Insertion pause",
-        unit=" ligne") :
+        unit=" it") :
         
         rows.append(dataframe.iloc[[i]])
         
@@ -148,6 +150,8 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
         if is_last :
             rows.append(pd.DataFrame([{
                 **{c : pd.NA for c in dataframe.columns},
+                "ID" : dataframe["ID"][i],
+                "n_burst" : dataframe["n_burst"][i]+0.5,
                 "burst" : "&",
                 "token" : "&",
                 "pos" : "<PAUSE>"
@@ -156,8 +160,3 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
     dataframe = pd.concat(rows, ignore_index=True)
 
     return dataframe
-
-chemin = "Align_BC/data/corpus"
-reader = read_corpus(filesFromFolder(chemin))
-test = postagging_for_df(reader)
-df2csv(test, "Align_BC/data/results5")
