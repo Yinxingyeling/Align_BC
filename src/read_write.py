@@ -7,6 +7,15 @@ from typing import Literal
 from collections import defaultdict
 import pandas as pd
 
+METADATA = [
+    "ID",   "input_corpus", "charge",	"outil",	"n_burst",	
+    "debut_burst",	"duree_burst",	"duree_pause",	"duree_cycle",	
+    "pct_burst",	"pct_pause",	"longueur_burst",	
+    "burst",    "token",   "pos", "chunk", "type_chunk",   "bilou", # BILOU
+    "startPos",	"endPos",	"docLength",	
+    "categ",	"charBurst",	"ratio"
+]
+
 def extension(filename:str)->str :
     return Path(filename).suffix[1:]
 
@@ -41,16 +50,6 @@ def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]="all", limi
 
         Pandas for excel used openpyxl, make sure you have installed !
     """
-
-    all_column = [
-        "ID",	"charge",	"outil",	"n_burst",	
-        "debut_burst",	"duree_burst",	"duree_pause",	"duree_cycle",	
-        "pct_burst",	"pct_pause",	"longueur_burst",	
-        "burst",    "token",   "pos",  "type_chunk",   "schema_annot", # BILOU
-        "startPos",	"endPos",	"docLength",	
-        "categ",	"charBurst",	"ratio"
-    ]
-
     results = []
     
     for files in ext_files.values() :
@@ -72,12 +71,12 @@ def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]="all", limi
 
             if column == "all":
                 select_column = [
-                    col for col in all_column
+                    col for col in METADATA
                     if col in available_columns
                 ]
             else:
                 select_column = [
-                    col for col in all_column
+                    col for col in METADATA
                     if col in column and col in available_columns
                 ]
 
@@ -94,19 +93,96 @@ def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]="all", limi
     
     return final_df
 
-def df2dict(dataframe:pd.DataFrame, column:str|list[str], limit:None|int=None) -> dict :
+
+def df2dict(df:pd.DataFrame, is_tagged:bool=False, is_chunked:bool=False, for_sorted:bool=True) -> dict:
     """
-        Transforme un DataFrame en dict
+        DataFrame to dict
+        * is_tagged = True : if the df have runned `postagging_for_df`
+        * is_chunked = True : if the df have runned `chunker`
     """
-    pass
+    results = {}
+    grouped = df.groupby(["ID","n_burst"])
+
+    corpus_map = {
+        "F": "Formulation",
+        "P": "Plannification",
+        "R": "Révision"
+    }
+
+    for idx, (_, group) in enumerate(grouped):
+        first = group.iloc[0]
+
+        result = {
+            col: first[col]
+            for col in METADATA
+            if col in df.columns
+        }
+
+        if "ID" in result:
+            prefix = str(result["ID"])[0]
+            result["input_corpus"] = corpus_map.get(prefix)
+
+        if "burst" in df.columns:
+            result["burst"] = first["burst"]
+
+        if is_tagged and {"token","pos"}.issubset(df.columns):
+            result["token"] = group["token"].tolist()
+            result["pos"] = list(zip(group["token"], group["pos"]) )
+        # Directement utiliser les fonctions chunk_type et chunk_bilou
+        if is_chunked and {"chunk", "type_chunk", "bilou"}.issubset(df.columns):
+            chunks = []
+            current_tokens = []
+            current_bilou = []
+            # Corriger la partie token -> chunk 
+            for _, row in group.iterrows():
+                token = row.get("token", row.get("burst",""))
+                bilou = row["schema_annot"]
+                chunk_type = row["type_chunk"]
+
+                if bilou in ["B","I"]:
+                    current_tokens.append(token)
+                    current_bilou.append(bilou)
+
+                elif bilou == "L":
+                    current_tokens.append(token)
+                    current_bilou.append(bilou)
+                    chunks.append((" ".join(current_tokens), "".join(current_bilou), chunk_type))
+                    # Initialise à 0
+                    current_tokens = []
+                    current_bilou = []
+
+                elif bilou in ["U","O"]:
+                    chunks.append((token, bilou, chunk_type))
+
+            result["chunk"] = chunks
+
+        results[f"id_{idx}"] = result
+
+    if for_sorted :
+        final = {}
+        for i in range(len(results)) :
+            order = {
+                k : results[f"id_{i}"][k]
+                for k in METADATA
+                if k in results["id_1"].keys()
+            }
+            final[f"id_{i}"] = order
+        return final
+
+    return results
 
 def dict2json(dataframe:dict, path:Path|str) :
     """
-        S'utilise avec df2dict() pour ne pas avoir les doublons
+        S'utilise avec `df2dict(for_sorted=True)` ou `chunker(for_sorted=True)` pour ne pas avoir les doublons
         Rend un fichier json
     """
     import json
-    pass
+    if isinstance(dataframe, dict) :
+        with open(path, "w", encoding="utf-8") as f :
+            json.dumps(dataframe, f, ensure_ascii=False, indent=4)
+    else : 
+        print(f"{dataframe} isn't a dict object")
+    
 
 def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None, format:Literal["csv", "excel"]="csv") :
     """
@@ -117,17 +193,16 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
             col for col in column.split()
             if col in dataframe.columns.tolist()
         ]
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     if format == "excel" :
-        path = path + ".xlsx"
         dataframe.to_excel(
             excel_writer=path,
             columns=column,
         )
 
         return f"Conversion fini. Fichier csv sauvegarder : {path}"
-
-    path = path + ".csv"
     
     dataframe.to_csv(
         path_or_buf=path,
