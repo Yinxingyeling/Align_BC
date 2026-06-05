@@ -218,6 +218,7 @@ Problème :
     ![Version après correction](img/tagging_ap_corr.png)
 - Le tag des ponctuations n’a pas été corrigé, l’imbracation des tests n’est pas bien fait
 - INTJ : l.34 “équent” n’est pas une interjection
+- du ≠ de + le → corriger les du ☑️
 
 ### Test à effectuer
 - [ ]  `df2csv()`
@@ -234,3 +235,198 @@ Problème :
     - [ ]  dict → réécrire une fonction pour la conversion : prendre en compte, les token → list[token], pos = list[tuple(token, pos)] , chunk → list[ tuple(chunk, etiquette, syntaxique)]
 - [ ]  Write2Json : passer par la fonction df2dict pour avoir la sortie json comme voulu et non pas identique au csv → trop redondant, avec des doublons inutils
 - [ ]  Faire une fonction de filtre ⇒ choisir les pos ou token (chunk ?)
+
+## Preprocess before chunking (01/06)
+- NLTK chunk : manuel de fonctionnement de la création chunk manuelle.
+    - Il demande en entrée une liste de tuple `[(mot, pos)...]`
+- Fonction `df2dict` pour avoir la sortie en dictionnaire
+
+## Etiquette syntaxique -- Chunk (02/06)
+- `chunking` : prend une liste de `(mot, pos)` et rend en une liste de chunk `(sent, chunk_type)`.
+    - Pour facilité la tâche, nous ne prenons que les tag chunk au premier niveau
+- correction pour la sortie de `df2dict` : regroupe toutes les métadonnées non utilisé dans “information”
+
+### Problème à corriger
+- [x]  à → LAS
+- [x]  d’ → ADP
+
+## Chunker complet (03/06)
+### Problème rencontré
+
+- Dans la construction du dictionnaire (`df2dict`), la fonction ignore les lignes marquant la pause (*&*) car la fonction regroupe par “ID” et “n_burst”, or lors de l’ajout des pauses, ces deux colonnes n’ont pas de valeurs.
+    - Pour corriger ce problème, nous avons ajouté l’ID du burst précédent et sur la base du n_burst précédent, nous ajoutons 0.5. Afin de différencier les pauses des bursts existent et pour qu’ils ne soient pas regroupé en une seule et même ligne (avec tous les n_burst = 0)
+- ⚠️ Corriger l.94 (ajouter un test pour les tokens et pos vide)
+
+### Progression
+
+- rename `chunking`-> `chunk_type`
+- `chunk_bilou` :
+- `chunker` : réunit les deux fonctions précédentes pour l’étiquetage du chunk et donne le choix d’une sortie en dico ou en dataframe
+- `dict2json` : fait
+
+Le programme prend en moyenne 5 minutes
+```python
+# Test depuis `chunker_fr`
+from tok_pos import *
+from read_write import * 
+
+chemin = "data/corpus"
+reader = read_corpus(filesFromFolder(chemin))
+test = postagging_for_df(reader)
+dico = df2dict(test, True)
+chunks = chunker(dico)
+for i in range(len(chunks)) :
+    if i < 35 :
+        print(chunks[f"id_{i}"])
+```
+
+## Correction et debug (04/06)
+- l.94 : ajouter un test pour `pos="<PAUSE>"` sinon NLTK bloque
+- Pour pouvoir utiliser `explode` de pandas, il faut que la taille des valeurs dans les cellules soient identiques
+    - id_2803 : le burst est un chiffre `burst=98` → Ajouter un test et une étiquette pour les NUM. Garder la même étiquette pour pos et type_chunk
+    - Prendre en compte pos=AUX (ajouter dans `grammar`
+    - id_25042 : Un seul DET → ajout d’un type_chunk=DET dans `grammar`
+    - id_25060 : chunk vide pour les `token=[nan]` (ce sont les vides de pandas) ⇒ mettre en type_chunk un vide de pandas aussi
+- Ajout d’un création des dossiers pour la fonction `df2csv`.
+
+### Test
+```python
+ # Test 
+from read_write import *
+from tok_pos import *
+
+# chemin = "data/corpus"
+# reader = read_corpus(filesFromFolder(chemin))
+# test = postagging_for_df(reader)
+# df2csv(test, "data/postag/complet.csv")
+chemin = "data/postag/complet.csv"
+reader = read_corpus(filesFromFolder(chemin))
+dico = df2dict(reader, True)
+# chunk_dico = chunker(dico)
+# print(chunk_dico["id_25060"])
+chunks = chunker(dico, True)
+# df2csv(chunks, "data/chunks/complet.csv")
+df2csv(chunks, "data/chunks/complet_excel.xlsx", format="excel")
+# print(chunks)
+```
+
+## Préparation réunion 3 (05/06)
+### Préparation des fichiers
+```python
+# run in this file chunker_fr.py
+from read_write import *
+from tok_pos import *
+
+chemin = "data/corpus"
+reader = read_corpus(filesFromFolder(chemin))
+test = postagging_for_df(reader)
+df2csv(test, "data/postag/complet_df2csv.csv")
+df2csv(test, "data/postag/complet_df2excel.xlsx", format="excel")
+
+dico = df2dict(test, True)
+dict2json(dico, "data/postag/complet_df2json.json")
+
+chunk_dico = chunker(dico)
+dict2json(chunk_dico, "data/chunks/complet_dict2json.json")
+
+chunks = chunker(dico, True)
+df2csv(chunks, "data/chunks/complet_df2csv.csv")
+df2csv(chunks, "data/chunks/complet_df2excel.xlsx", format="excel")
+
+df_to_dico = df2dict(chunks, True, True)
+dict2json(df_to_dico, "data/chunks/complet_df2json.json")
+```
+* JSON ne peut pas sérialiser les `pd.NA` il faut convertir en `None`.
+ 
+### Test à effectuer
+- [ ]  `df2csv()`
+    - [x]  avec une sortie en excel 04/06
+    - [ ]  avec `column` sélectionné
+- [x]  Vérifier dans la sortie si pour *du* le pos a bien changé et que le token n’a pas été divisé en deux ou que le deuxième token ne soit présent
+
+### A faire pour
+- [x]  Finaliser le script de postagging avec `stanza` en ajoutant les modifications mentionnées lors de la réunion 2.
+- [x]  Préparer les règles pour débuter le chunk avec nltk 01/06
+- [x]  Pour le test du POS=X, ajouter la transformation du pos suivant aussi → ex: VERB_2
+- [x]  Vérifier la sortie de la fonction
+    - [x]  df
+    - [x]  dict → réécrire une fonction pour la conversion : prendre en compte, les token → list[token], pos = list[tuple(token, pos)] , chunk → list[ tuple(chunk, etiquette, syntaxique)] 01/06
+- [x]  Write2Json : passer par la fonction df2dict pour avoir la sortie json comme voulu et non pas identique au csv → trop redondant, avec des doublons inutils
+- [ ]  Faire une fonction de filtre ⇒ choisir les pos ou token (chunk ?)
+
+### Explication dans le rapport 
+#### Progression 21/05 - 05/06
+
+Fonctions conçuent pour aboutir au résultat attendu :
+
+- **read_write.py** :
+    - `METADATA` : (constant) définit l’ordre et les colonnes que doient contenir le tableur final
+    - `extension` : (fonction) retourne l’extension d’un fichier → *str*
+    - `filesFromFolder` : extrait les fichiers d’un dossier donnée → *dict[str, list[str]]*
+    - `read_corpus` : Extrait les données selon les colonnes sélectionné d’un fichier csv ou excel → *pd.DataFrame*
+    - `df2dict` : Convertie un DataFrame en dict → *dict*
+    - `dict2json` : Convertie un dict en fichier json → *<path>.json*
+    ⇒ La conversion d’un DataFrame en json est aussi faisable, cepandant la conversion d’un df après traitement (postagging et chunking) rendra le fichier redondant avec les répétitions suite à explode des colonnes voulues. Ainsi il est préférable faire une première conversion (df → dict) pour enlever les doublons
+    - `df2csv` : Convertie un DataFrame en fichier CSV ou XSLX → *<path>.<csv|xlsx>*
+- **tok_pos.py** :
+    - `postagging_for_df` : Tokeniser et postagger → *pd.DataFrame*
+- **chunker_fr.py** :
+    - `chunk_type` : Etiquetage syntaxique des chunks via NLTK → *list[tuple]*
+    - `chunk_bilou` : Etiquetage bilou des groupes chunks syntaxiques après `chunk_type` → *list[tuple]*
+    ⇒ L’étiquetage bilou se base sur l’étiquetage syntaxique, et ne tag pas par chunk (token) mais par groupe syntaxique de chunk pour faciliter la tâche
+    - `chunker` : Applique les fonctions précédentes sur un dict → *dict | pd.DataFrame*
+
+#### Résultat
+
+##### After postag
+
+**Excel : data/chunks/complet_df2excel.xlsx**
+
+![postag : excel](img/postag_excel.png)
+
+**JSON : data/postag/complet_df2json.json**
+
+![postag : json](img/postag_json.png)
+
+##### After chunk
+
+**Excel : Align_BC/data/chunks/complet_df2excel**
+
+![chunk : excel](img/chunk_excel.png)
+
+**JSON :** 
+
+**data/chunks/complet_df2json.json**   |  **data/chunks/complet_dict2json.json**
+
+![chunk : json](img/chunk_json.png)
+
+#### Questions
+
+- INTJ : l.34 “équent” n’est pas interjection
+    
+    !Autres exemples INTJ
+    
+    Autres exemples INTJ
+    
+    **Comment corriger ?**
+    
+- Il y a une partie des LAS qui ont été reconnut comme X par le postag de stanza, est-ce qu’il faut corriger ?
+- Est-ce qu’il y a besoin d’unifier les **null**, **NaN**, **nan**, **None** pour les vides ?
+- Lors de l’étiquetage chunk, les tag <PRON> et <DET> été trouvé seul sans contexte dans les burst. Ainsi il était difficile de savoir sous quelle étiquette syntaxique chunk il fallait les ranger. Pour ne pas bloquer le script, j’ai ranger <PRON> sous **NP** et j’ai créé une étiquette chunk **DET** pour les <DET>. Un conseille ou une correction à apporter ?
+- J’ai mis un tag <PAUSE> en pos et chunk pour les marques de pause. Il est possible de les supprimer et changer par du vide.
+
+#### Remarque
+
+##### Durée du programme
+
+Le programme prend environ 7 minutes au total pour le postagging et chunking et avoir une sortie en excel/csv ou json
+
+Le programme de postagging prend le plus de temps, il faut patienter un peu plus de 5 minutes. Ce temps d’attente est surtout dû au grand nombre de ligne que le programme doit parcourir et tagger. Dans ces 5 minutes, l’insertion des pauses (&, <PAUSE>) prend environ 30 secondes. L’explode des lignes avec pandas prend environ 1 minute.
+
+!image.png
+
+Le script pour le chunk et la sauvegarde au format JSON, Excel et CSV prend environ 1 minute. Comme avant de chunker, nous convertissons le DataFrame en dict, le script est plus rapide pour traiter ces données.
+
+##### L’utilisation du chunker
+
+Pour lancer le script pour chunker, il est impérativement obligatoire de lancer le programme de postagging avant. Le chunker de NLTK demande en entrée une liste de tuple avec le token et le postag → `[(token, POS)]`.
