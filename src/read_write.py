@@ -1,11 +1,12 @@
 """
-    Extraction pu écriture des données depuis les fichiers csv ou excel
-
+    Extraction des données depuis les fichiers csv ou excel.
+    Ecriture d'objet dict ou pd.DataFrame vers des fichiers json ou csv/excel
 """
 from pathlib import Path
 from typing import Literal
 from collections import defaultdict
 import pandas as pd
+import argparse
 
 METADATA = [
     "ID",   "input_corpus", "charge",	"outil",	"n_burst",	
@@ -179,7 +180,7 @@ def dict2json(dataframe:dict, path:Path|str) :
     import json
     if isinstance(dataframe, dict) :
         with open(path, "w", encoding="utf-8") as f :
-            json.dumps(dataframe, f, ensure_ascii=False, indent=4)
+            json.dump(dataframe, f, ensure_ascii=False, indent=4, default=lambda obj: None if obj is pd.NA else str(obj))
     else : 
         print(f"{dataframe} isn't a dict object")
     

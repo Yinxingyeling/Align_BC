@@ -5,7 +5,6 @@
 from read_write import METADATA
 import pandas as pd
 import nltk.chunk as ck
-from tqdm import tqdm
 
 def chunk_type(tagged:list[tuple]) -> list[tuple]:
     """

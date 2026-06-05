@@ -1,18 +1,16 @@
 """
-    Test differents module of tokenisation, lemmatisation, POS and chunk
+    Test differents module of tokenisation, POS and chunk
     Librairies : 
         - stanza
         - NLTK (chunk -> rule)
 """
-
-# from read_write import *
 import pandas as pd
 import stanza, torch
 from tqdm import tqdm
 
 def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "pos"])->pd.DataFrame :
     """
-        wordisation, POS with stanza of burst
+        Tokenisation, POStagging with stanza of burst
     """
     use_gpu = False
     if torch.cuda.is_available() :
