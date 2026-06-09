@@ -4,9 +4,11 @@
         - stanza
         - NLTK (chunk -> rule)
 """
-import pandas as pd
+from read_write import *
 import stanza, torch
 from tqdm import tqdm
+# import argparse
+# import pandas as pd
 
 def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "pos"])->pd.DataFrame :
     """
@@ -38,12 +40,19 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
         desc="POS tagging",
         unit=" burst") :
 
+        # Etiquette <SPACE> et <SUPPR> -> distinguer les "lignes vides"
         # Traitement des lignes d'espace/vide
         if pd.isna(burst) or str(burst).strip() == "":
-            # dataframe.loc[i, "token"] = pd.NA
             dataframe.loc[i, "token"] = ""
+            if "" in dataframe["charBurst"][i] or "" in dataframe["charBurst"][i] :
+                dataframe.loc[i, "pos"] = "SPACE"
+            elif "" in dataframe["charBurst"][i] :
+                dataframe.loc[i, "pos"] = "SUPPR"
+            # dataframe.loc[i, "token"] = pd.NA
             dataframe.loc[i, "pos"] = "" # laisser vide ?
             continue
+
+        
 
         doc = nlp(str(burst))
         tok = [] # -> token
@@ -80,7 +89,11 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
                         pos = "PUNCT_FAIBLE"
                     elif token in punct_fort :
                         pos = "PUNCT_FORT"
-                
+
+                # La plupart des INTJ sont des LAS
+                if pos == "INTJ" :
+                    pos = "LAS"
+
                 # Pour DET multi-word token français
                 if surface in mwt : 
                     token = surface
@@ -158,3 +171,37 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
     dataframe = pd.concat(rows, ignore_index=True)
 
     return dataframe
+
+def main() :
+
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="Pour extraire ou lire depuis un fichier excel, veuillez installer `openpyxl`"
+        )
+    
+    parser.add_argument("inputpath", type=str, help="CSV, Excel or JSON file")
+    parser.add_argument("-o", "--outputfile", type=str, help="Filename to save. Choice the format to save with -f")
+    parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
+    parser.add_argument("--column", type=list, help="Limit which columns were used", default=None)
+    parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+
+    args = parser.parse_args()
+    if args.inputpath.suffix[1:] == ".json" :
+        df = json_reader(args.inputpath, "df")
+    else :
+        df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
+    postagged_df = postagging_for_df(df)
+
+    if args.outputfile : 
+        if args.format : 
+            out_format = args.format
+            if out_format != "json" :
+                return df2csv(df, args.outputfile,args.column, args.format)
+            else :
+                chunked = args.is_chunked or input("Is the inputfile chunked ? (Y/N)").lower() == "y"
+                return dict2json(df2dict(postagged_df, True, chunked), args.outputfile)
+            
+
+if __name__ == "__main__" :
+    main()

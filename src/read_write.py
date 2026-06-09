@@ -43,7 +43,7 @@ def filesFromFolder(foldername:str)->dict[str,list[str]] :
 
     return dict(results)
     
-def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]="all", limit:None|int=None)-> pd.DataFrame :
+def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]|None=None, limit:None|int=None)-> pd.DataFrame :
     """
         Extrait les données selon les colonnes voulues du fichier csv ou excel
         - column = "all" # prend en compte toutes les colonnes
@@ -70,7 +70,7 @@ def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]="all", limi
             # new_column = ["token", "lemma", "pos", type_chunk", "schema_annot"]
             available_columns = corpus.columns.tolist()
 
-            if column == "all":
+            if column == None:
                 select_column = [
                     col for col in METADATA
                     if col in available_columns
@@ -129,6 +129,7 @@ def df2dict(df:pd.DataFrame, is_tagged:bool=False, is_chunked:bool=False, for_so
         if is_tagged and {"token","pos"}.issubset(df.columns):
             result["token"] = group["token"].tolist()
             result["pos"] = list(zip(group["token"], group["pos"]) )
+            
         # Directement utiliser les fonctions chunk_type et chunk_bilou
         if is_chunked and {"chunk", "type_chunk", "bilou"}.issubset(df.columns):
             chunks = []
@@ -184,6 +185,17 @@ def dict2json(dataframe:dict, path:Path|str) :
     else : 
         print(f"{dataframe} isn't a dict object")
     
+def json_reader(inputfile:Path|str, output_format:Literal["df", "dict"]) -> pd.DataFrame|dict :
+    """
+        JSON file reader
+        return dict or pd.DataFrame
+    """
+    import json
+    with open(inputfile, 'r', encoding="utf_8") as f :
+        if output_format == "df" :
+            return pd.read_json(f)
+        else :
+            return json.load(f)
 
 def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None, format:Literal["csv", "excel"]="csv") :
     """
@@ -213,3 +225,52 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
     )
 
     return f"Conversion fini. Fichier csv sauvegarder : {path}"
+
+
+def main() :
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="Pour extraire ou lire depuis un fichier excel, veuillez installer `openpyxl`"
+        )
+    parser.add_argument("inputpath", type=str, help="Can give file or folder. {CSV, XLSX, JSON}")
+    parser.add_argument("-o", "--outputfile", type=str, help="Filename to save. Choice the format to save with -f")
+    parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
+    parser.add_argument("--json-reader", choices=["df", "dict"], help="To read json file")
+    parser.add_argument("--column", type=list, help="Limit which columns were used", default=None)
+    parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    # Mettre en input()
+    parser.add_argument("--is-tagged", type=bool, help="True if is postagged")
+    parser.add_argument("--is-chunked", type=bool, help="True if is chunked")
+    
+    args = parser.parse_args()
+
+    df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
+
+    # Affichage
+    if args.json_reader :
+        reader = json_reader(args.inputpath, args.json_reader)
+        limit = args.limit or len(reader)
+        idx = 0
+        while idx < limit :
+            for k, v in reader[f"id_{idx}"] :
+                print(idx)
+                print(k, "\t\t", v)
+                print()
+            idx += 1
+
+    # Sortie
+    if args.outputfile : 
+        if args.format : 
+            out_format = args.format
+            if out_format != "json" :
+                return df2csv(df, args.outputfile,args.column, args.format)
+            else :
+                tagged = args.is_tagged or input("Is the inputfile postagged ? (Y/N)").lower() == "y"
+                chunked = args.is_chunked or input("Is the inputfile chunked ? (Y/N)").lower() == "y"
+                return dict2json(df2dict(df, tagged, chunked), args.outputfile)
+
+
+
+if __name__ == "__main__" :
+    main()
