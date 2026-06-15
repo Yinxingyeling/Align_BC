@@ -430,3 +430,197 @@ Le script pour le chunk et la sauvegarde au format JSON, Excel et CSV prend envi
 ##### L’utilisation du chunker
 
 Pour lancer le script pour chunker, il est impérativement obligatoire de lancer le programme de postagging avant. Le chunker de NLTK demande en entrée une liste de tuple avec le token et le postag → `[(token, POS)]`.
+
+## Argparse (08/06)
+- `json_reader` : lire un fichier json → *pd.DataFrame | dict*
+    - A tester
+- argparse
+    - [x]  read_write.py
+    - [x]  tok_pos.py
+    - [ ]  chunker_fr.py
+    - [ ]  main_script.py
+
+## Réunion 3 (09/06)
+- Corriger les types de chunks et certains POS
+    - AUX = 1 chunk VP | Participe Passé = 1 chunk VP
+    - PRON = NP
+    - PRON + VERB = VP_cl
+- Vérifier et corriger :
+    - [x]  PP avec adp figé (”loin”…)
+    - [x]  du / des / au / aux ⇒ ADP
+    - [x]  (INTJ = LAS) + SPACE + SUPPR
+    - [x]  adverbes figés 10/06
+    - [x]  “de” en fin de burst relié au burst suivant
+        - [x]  DET_NP (?)
+
+## Correction postag (10/06)
+Progression
+
+- Ajout d’adverbes figés dans la liste
+- Correction : les adverbes figés ne sont pas matcher
+- Idée de traitement pour le chunk → relier fin et début de burst
+    - Créer un dico_token qui range par id un dict comportant [”burst”, “token”, “chunk”]
+    - Dans une boucle qui itère `dico_token`, → `if dico["burst"] == dico_token["burst"]` alors on range les chunk dans une liste (`chunk_list`) puis vérifier s’il n’y a pas de doublon
+        - Dans la boucle, si le burst est une ligne vide, alors ajouter un chunk (SUPPR/SPACE)
+        ![idée de traitement des chunks : screen du terminal](img/terminal.png)
+Ligne à vérifier après fin des task
+
+- 715 : emp & êcher
+- 732 : trente = NUM → vérification pour chunk
+- 4608 : de plus même
+- 63946 : sé & curité → burst = NP
+- 39008 : décalage de colonne + séparation token faux → *;␣d* `tok={" d", " d"}`
+
+Correction à apporter 
+
+- [x]  dans la grammaire de `chunk_type` ajouter une gestion pour *trente ans* = **NUM+NOUN**
+
+Correction faite :
+
+→ adverbes figés
+![Les adverbes figés traités](img/adv_fige.png)
+→ gestion des lignes vides = SPACE/SUPPR
+![Gestion des lignes vides : SUPPR/SPACE](img/suppr_space.png)
+
+## Correction détaillée chunk 1 (11/06)
+
+### Problème — question
+
+Comment tagger les nombres :
+
+- [ ]  l.6779-6781 : “15 à 25 ans” (*NUM+ADP+NUM+NOUN*)
+- [ ]  l.8882 : “de 2 courant” (*ADP+**LAS**+NOUN*) → (*ADP+NUM+NOUN*)
+    - [ ]  l.11054 : “de 23000 étudiants” (*ADP+NUM+NOUN*)
+- [ ]  l.11654 : “12” = NUM (à garder ?)
+La ligne est juste composé du chiffre 12
+- [ ]  l.19246 : “la carte du bus est à 200” = NUM (à garder ?)
+- [ ]  l.19843 : “juillet 2018…” (*NOUN+NUM*)
+- [ ]  l.43085 : “du 09/12/16” (*ADP+**NOUN***)
+- [ ]  l.50529-50511 : “8 décembre 2016” (*NUM+NOUN+NUM*)
+- [ ]  l.50525-50527 : “Aujourd & ‘hui” (*ADV+<PAUSE>+NOUN*)
+
+### Correction
+
+- 1 nombre (ex: 2, 8…) ont été étiqueté LAS → ajout d’une restriction dans le test d’étiquetage de LAS
+l.45 : `pos != "PUNCT"` → `pos not in ["PUNCT", "NUM"]` 
+Evite de tagger les ponctuation et les numéro en LAS quand le nombre de caractère est en dessous de 3
+
+### Explication — progression
+
+Pour prendre en compte les burst d’avant et d’après dans l’analyse du chunk, j’ai décidé de ranger tous les listes de (token, pos) dans une seule liste et traiter le tout dans la fonction de `chunk_type`. Ainsi l’analyse chunk prendra en considération tout le contexte.
+
+### Problème — script
+
+- Refaire `chunk_bilou`
+    ![Problème des bilou pour les adverbes figés](img/bilou_advFige.png)
+- Enlever les doublons → changer `result["chunk"] = []` par une liste simple et transformer la liste en tuple pour enlever les doublons puis affecter à `result["chunk"]`.
+❌ 12/06 : possible de supprimer les qui ne sont pas des répétitions successives
+- Corriger les `pd.NA` pour qu’il n’y ait plus de faute pour l’extraction dans la conversion avec `to_df=True`.
+    ![Dans la conversiont en DataFrame, les `pd.NA` ne sont pas accepté](img/pd_NA.png)
+* Vérifier la fin pour voir si cette ligne pose problème ou non 
+    ![Ligne 143-145 de chunker_fr.py](img/l_143.png)
+
+## Correction détaillée : chunk 2 (12/06)
+
+### Problème — correction
+
+- [x]  Doublons des chunks en raison d’une itération sur les tokens
+    ![Chunk doublé](img/doublons.png)
+- [x] Les derniers chunks sont souvent tagger comme null alors que le tag chunk existe
+    ![Chunk null](img/null.png)
+- [x] Il y a des tokens qui n’ont pas été chunker alors qu’ils ont un pos
+    ![Tokens sans chunk](img/ss_chunk.png)
+⇒ La plupart est du à un décalage car certain pos n’ont pas été reconnu dans la formation du chunk_type
+
+- [x]  Les VP_cl ne sont pas reconnu → NP + VP
+⇒ ajouter une description ou un plus pour le PRON format le VP_cl en utilisant `deprel=expl:com` = PRON_comp
+PRON + PRON_cl + VERB
+- [x]  Corriger `pd.NA` ou `None` pour ne pas bloquer la convertion avec `to_df = True`.
+- [x]  Corriger `chunk_bilou` pour que les adv figés soient comptabilisé comme 1.
+- [x]  Prendre en compte les ADP figés
+
+### Ajout de code
+
+- Pour former les VP_cl (*tok_pos.py*)
+    ![VP_cl ligne 77-78](img/l_77.png)
+→ ne prenait que “y” en compte ⇒ correction 
+
+```python
+# Ligne 78
+if pos == "PRON" and (word.deprel in ["expl:comp", "expl:pv"]) :
+	pos = "PRON_cl"
+```
+
+### Correction -- accompli
+* ADV/ADP figé
+    ![ADV et ADP figé en une ligne](img/adp_adv.png)
+* PRON_cl
+
+### Questions chunk
+- id_25068 : “… de mesurer …” → ADP + VERB
+Pour cette exemple, comme dans la grammaire de construction des chunks, l’étiquette ADP n’apparait que pour le groupe PP (ADP + NP), ainsi lorsque nous avons des ADP seul ou qui se trouve avant un verbe à l’infinitif, le script ne peut pas le reconnaître et le skip.
+Pour régler ce problème, est-ce que dans la règle de grammaire, il faut ajouter une étiquette ADP seul ou ranger cette forme (ADP+VERB) dans VP ?
+!["de mesurer" difficile à étiqueter](img/de_mesurer.png)
+⇒ PP
+- l. 37571 : “… Il n’y avait…”
+    Comme *y* fait parti des pronoms clitiques français, est-ce une forme de groupe verbal clitique ?
+    Si oui, dois-je ajouter dans la règle de grammaire des chunks ce groupe : PRON+ADV+PRON_cl+AUX ?
+    !["il y avait" : les formes clitiques](img/fmt_cl.png)
+    ⇒ Il y avait = VP
+    Il NP / n’ ADVP / y avait VP
+- Pour mieux les traiter et distinguer les pronoms clitiques des autres pronoms, j’ai procédé à un ajout de détail dans le pos (⇒ PRON_cl). Cependant, dans les règles grammaticaux du chunk que nous avons défini dans la précédente réunion, la composition d’un VP_cl est obligatoirement  **{<PRON>+<VP>}**. Est-ce correct de le changer ainsi : **{<PRON>?<PRON_cl><VP>}** pour pouvoir traiter les cas comme ci-dessous
+    ![PRON_cl + VERB](img/pron_cl.png)
+    ⇒ VP
+
+## Correction détaillée : chunk 3 (15/06)
+### Choix des types de chunk 
+
+1. Ajout d’un `PP_brok`, pour les prépositions cassé en raison de fautes d’orthographe et de mal reconnaissance des POS de stanza
+    
+    → Voir l’exemple avec **id_19214** où *de la ou* est en réalité *de là où* considérant comme PP de la phrase précédente.
+    
+2. Dans les groupes nominaux, ajouter le pos NUM pour traiter les dates que l’on peut considérer comme groupes nominaux temporels
+3. Ajout d’un NUM seul pour le type NP pour 
+*l.19246 : “la carte du bus est à 200”* 
+4. Correction dans VP_cl car les pronoms clitiques ont été repéré et postag par *PRON_cl* plus tôt dans le traitement avec stanza
+    Ainsi, nous avons toutes les pronoms clitiques reconnuent
+5. Ajout de tag pouvant être sélectionné en tant que PP pour régler les problèmes comme : *de mesurer* avec *mesurer* comme VP, prise en compte des VP_cl qui peuvent avoir le même cas (?)
+6. Dans le prétraitement avec stanza, ajout d’un détail pour les adverbes figés ⇒ pos = ADV_fixed
+    De même pour les ADP → ADP_fixed
+7. A corriger, l’étiquetage des NUM semble quelques fois incorrecte
+    ![I identifié comme NUM (id 573)](img/I_num.png)
+8. Corriger les ADP seuls
+    ![ADP seul](img/adp_seul.png)
+9. DET seul
+    ![DET seul à corriger pour qu'il y ait une étiquette chunk](img/id_88.png)
+10. Comment traiter km/h ? sachant que km=NOUN=NP, /=SYM=UNKNOWN, h=LAS=LAS
+    ![Comment traiter km/h](img/km_h.png)
+
+### Correction postag
+Pour que les signes comme € ou % ne sont pas reconnus pour LAS
+    ![Les signes tagger SYM par stanza sont à garder](img/sym.png)
+
+### Résultat final
+#### Commande de test
+```python
+chemin = "data/corpus"
+reader = read_corpus(filesFromFolder(chemin))
+postag = postagging_for_df(reader)
+dico = df2dict(postag, True)
+
+chemin1 = "data/postag/postag_df.csv"
+df2csv(postag, chemin1, format="csv")
+df2csv(postag, "data/postag/df_excel.xlsx", format="excel")
+dict2json(dico, "data/postag/postag_dict.json")
+
+chunk = chunker(dico)
+dict2json(chunk, "data/chunks/chunk_dict.json")
+
+chunk_df = chunker(dico, True)
+df2csv(chunk_df, "data/chunks/chunk_df.csv", format="csv")
+df2csv(chunk_df, "data/chunks/df_excel.xlsx", format="excel")
+```
+
+#### Sorties du test
+![Sortie complète (chunk, postag) en tableau csv](img/res_csv.png)
+![Sortie complète au format JSON](img/res_json.png)
