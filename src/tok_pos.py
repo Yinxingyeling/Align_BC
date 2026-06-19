@@ -103,7 +103,7 @@ def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
 
     return tok, postagging
 
-FIXED_MARKER = "_fixed"
+FIXED_MARKER = "_mwe" # Multiword expression
 adv_path = Path(__file__).parent / "ressources" / "adv_fige.txt"
 adp_path = Path(__file__).parent / "ressources" / "adp_fige.txt"
 
@@ -253,8 +253,11 @@ def main() :
     parser.add_argument("inputpath", type=str, help="CSV, Excel or JSON file")
     parser.add_argument("-o", "--outputfile", type=str, help="Filename to save. Choice the format to save with -f")
     parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
-    parser.add_argument("--column", type=list, help="Limit which columns were used", default=None)
+    parser.add_argument("--column", nargs="+", help="Limit which columns were used", default=None)
     parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    # input()
+    parser.add_argument("--is-tagged", action=argparse.BooleanOptionalAction, help="True if is postagged")
+    parser.add_argument("--is-chunked", action=argparse.BooleanOptionalAction, help="True if is chunked")
 
     args = parser.parse_args()
     if args.inputpath.suffix[1:] == ".json" :
@@ -272,6 +275,30 @@ def main() :
                 chunked = args.is_chunked or input("Is the inputfile chunked ? (Y/N)").lower() == "y"
                 return dict2json(df2dict(postagged_df, True, chunked), args.outputfile)
             
+
+    # Affichage
+    limit = (
+        args.limit 
+        or int(input(f"Limit output (press ENTER for {len(dico)}) items : ")) 
+        or len(dico)
+    )
+    chunked = (
+        args.is_chunked
+        if args.is_chunked is not None
+        else input("Is the input file chunked? (Y/N) ").strip().lower() == "y"
+    )
+    dico = df2dict(postagged_df, True, chunked)
+    idx = 0
+    while idx < limit :
+        key = f"id_{idx}"
+        dico_by_id = dico[key]
+        width = max(len(k) for k in dico_by_id)
+        print(f"=== {key} ===")
+
+        for k, v in dico_by_id.values() :
+            print(f"{k:<{width}} : {v}")
+        print("-" * 50)
+        idx += 1
 
 if __name__ == "__main__" :
     main()

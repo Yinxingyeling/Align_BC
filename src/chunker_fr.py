@@ -14,16 +14,16 @@ def chunk_type(tagged:list[tuple]) -> list[tuple]:
     """
     grammar = r"""
         NP : # Groupes nominaux 
-            {<(DET|ADV|ADV_fixed|ADJ|NUM)*>*<(NOUN|PRON|PRON_cl|PROPN)>+<ADJ|NUM>*} # + <NUM><NOUN> -> trente/25 ans
+            {<(DET|ADV|ADV_mwe|ADJ|NUM)*>*<(NOUN|PRON|PRON_cl|PROPN)>+<ADJ|NUM>*} # + <NUM><NOUN> -> trente/25 ans
             {<NUM>+<SYM>*<NUM>*} # 90%
         VP : # Groupes verbaux
             {<AUX|VERB>}
         VP_cl : # Groupes verbaux clitiques
             {<PRON>?<PRON_cl><VP>} # sinon le VP_cl sont reconnu comme NP+VP 
         PP : # Groupes prépositionnels
-            {<(ADP|ADP_fixed)><(NP|VP|VP_cl)>} # "de mesurer"
+            {<(ADP|ADP_mwe)><(NP|VP|VP_cl)>} # "de mesurer"
         AP : # Groupes adjectivaux
-            {<(ADV|ADV_fixed)>*<ADJ>+}
+            {<(ADV|ADV_mwe)>*<ADJ>+}
         ADVP : # Groupes adverbiaux
             {<(ADV|ADV_fixed|INTJ)>+}
         CONJ : # Conjonctions
@@ -34,6 +34,7 @@ def chunk_type(tagged:list[tuple]) -> list[tuple]:
             {<LAS>}
         PP_brok : 
             {<(ADP|ADP_fixed)>?<DET>?} # "de la" = "de là"-> id_19214 + "pour a son sujet"/"contre Jai" (ADP)
+        DET
         UNKNOWN :
             {<X|SYM>}
     """
@@ -100,25 +101,6 @@ def _match_fixed_at(words: list[str], i: int) -> int:
             if [w.lower() for w in words[i:end]] == expr:
                 return len(expr)
     return 0
-
-def _count_slots(burst: str, tag: str) -> int:
-    if FIXED_MARKER in tag:
-        return 1
-
-    words = burst.split()
-    i = 0
-    slots = 0
-
-    while i < len(words):
-        matched_len = _match_fixed_at(words, i)
-        if matched_len:
-            slots += 1
-            i += matched_len
-        else:
-            slots += 1
-            i += 1
-
-    return slots
 
 def chunk_bilou(tagged:list[tuple]) -> list[tuple] :
     """
@@ -282,25 +264,6 @@ def chunker(dico:dict, to_df:bool=False, for_sorted:bool=True)-> dict | pd.DataF
         return df
     return results
 
-chemin = "data/corpus"
-reader = read_corpus(filesFromFolder(chemin))
-postag = postagging_for_df(reader)
-dico = df2dict(postag, True)
-
-chemin1 = "data/postag/postag_df.csv"
-df2csv(postag, chemin1, format="csv")
-df2csv(postag, "data/postag/df_excel.xlsx", format="excel")
-dict2json(dico, "data/postag/postag_dict.json")
-
-chunk = chunker(dico)
-dict2json(chunk, "data/chunks/chunk_dict.json")
-
-chunk_df = chunker(dico, True)
-df2csv(chunk_df, "data/chunks/chunk_df.csv", format="csv")
-df2csv(chunk_df, "data/chunks/df_excel.xlsx", format="excel")
-
-
-
 def main() :
 
     parser = argparse.ArgumentParser(
@@ -308,45 +271,75 @@ def main() :
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         epilog="""Pour extraire ou lire depuis un fichier excel, veuillez installer `openpyxl`"""
         )
-    
-    parser.add_argument("inputpath", type=str, help="CSV, Excel or JSON file")
-    parser.add_argument("-o", "--outputfile", type=str, help="Filename to save. Choice the format to save with -f")
-    parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
-    parser.add_argument("--column", type=list, help="Limit which columns were used", default=None)
-    parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    subparsers = parser.add_subparsers(dest="Command", required=True)
+
+    process_parser = subparsers.add_parser("process")
+    process_parser.add_argument("inputpath", type=str, help="CSV, Excel or JSON file")
+    process_parser.add_argument("-o", "--outputfile", type=str, help="Filename to save. Choice the format to save with -f")
+    process_parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
+    process_parser.add_argument("--column", nargs="+", help="Limit which columns were used", default=None)
+    process_parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    # input()
+    process_parser.add_argument("--is-tagged", action=argparse.BooleanOptionalAction, help="True if is postagged")
+    process_parser.add_argument("--is-chunked", action=argparse.BooleanOptionalAction, help="True if is chunked")
     # -------- Peut être utilisé seul --------
-    parser.add_argument("-ck", "--chunk-type", type=list, help=chunk_type.__doc__)
-    parser.add_argument("-b", "--bilou", type=list, help="tag BILOU. It's helped by chunk-type")
+    chunk_parser = subparsers.add_parser("chunk")
+    chunk_parser.add_argument("-ck", "--chunk-type", nargs="+", help=chunk_type.__doc__)
+    chunk_parser.add_argument("-b", "--bilou", nargs="+", help="tag BILOU. It's helped by chunk-type")
 
     args = parser.parse_args()
 
-    if args.inputpath.suffix[1:] == ".json" :
-        dico = json_reader(args.inputpath, "dict")
-    else :
-        df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
-        dico = df2dict(df)
-    
-    if args.chunk_type :
-        ck = chunk_type(args.chunk_type)
-        print(ck)
-    
-    if args.bilou :
-        bilou = chunk_bilou(chunk_type(args.bilou))
-        print(bilou)
-    
-    if args.outputfile : 
-        if args.format : 
-            out_format = args.format
-            if out_format != "json" :
-                chunked = chunker(dico)
-                return df2csv(chunked, args.outputfile,args.column, args.format)
-            else :
-                tagged = args.is_tagged or input("Is the inputfile postagged ? (Y/N)").lower() == "y"
-                chunked = chunker(dico, True)
-                return dict2json(df2dict(chunked, tagged, True), args.outputfile)
+    if args.Command == "process" :
 
-    # Affichage
-    
+        if args.inputpath.suffix[1:] == ".json" :
+            dico = json_reader(args.inputpath, "dict")
+        else :
+            df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
+            dico = df2dict(df)
+        
+        chunked = chunker(dico)
 
+        if args.outputfile : 
+            if args.format : 
+                out_format = args.format
+                if out_format != "json" :
+                    return df2csv(chunked, args.outputfile,args.column, args.format)
+                else :
+                    tagged = (
+                        args.is_tagged 
+                        if args.is_tagged is not None
+                        else input("Is the input file postagged ? (Y/N)").lower() == "y"
+                    )
+                    chunked = chunker(dico, True)
+                    return dict2json(df2dict(chunked, tagged, True), args.outputfile)
+
+        # Affichage
+        limit = (
+            args.limit 
+            or int(input(f"Limit output (press ENTER for {len(dico)}) items : ")) 
+            or len(dico)
+        )
+        idx = 0
+        while idx < limit :
+            key = f"id_{idx}"
+            dico_by_id = dico[key]
+            width = max(len(k) for k in dico_by_id)
+            print(f"=== {key} ===")
+
+            for k, v in dico_by_id.items() :
+                print(f"{k:<{width}} : {v}")
+            print("-" * 50)
+            idx += 1
+
+    elif args.Command == "chunk" :
+        if chunk_parser.chunk_type :
+            ck = chunk_type(args.chunk_type)
+            print(ck)
+        
+        if chunk_parser.bilou :
+            bilou = chunk_bilou(chunk_type(args.bilou))
+            print(bilou)
+        
+        
 if __name__ == "__main__" :
     main()

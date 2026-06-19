@@ -224,8 +224,7 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
         index=False
     )
 
-    return f"Conversion fini. Fichier csv sauvegarder : {path}"
-
+    return f"Conversion fini. Fichier csv sauvegarder : {path}" 
 
 def main() :
     parser = argparse.ArgumentParser(
@@ -237,12 +236,12 @@ def main() :
     parser.add_argument("-o", "--outputfile", type=str, help="Filename to save. Choice the format to save with -f")
     parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
     parser.add_argument("--json-reader", choices=["df", "dict"], help="To read json file")
-    parser.add_argument("--column", type=list, help="Limit which columns were used", default=None)
+    parser.add_argument("--column", nargs="+", help="Limit which columns were used", default=None)
     parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
     # Mettre en input()
-    parser.add_argument("--is-tagged", type=bool, help="True if is postagged")
-    parser.add_argument("--is-chunked", type=bool, help="True if is chunked")
-    
+    parser.add_argument("--is-tagged", action=argparse.BooleanOptionalAction, help="True if is postagged")
+    parser.add_argument("--is-chunked", action=argparse.BooleanOptionalAction, help="True if is chunked")
+
     args = parser.parse_args()
 
     df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
@@ -250,14 +249,26 @@ def main() :
     # Affichage
     if args.json_reader :
         reader = json_reader(args.inputpath, args.json_reader)
-        limit = args.limit or len(reader)
-        idx = 0
-        while idx < limit :
-            for k, v in reader[f"id_{idx}"] :
-                print(idx)
-                print(k, "\t\t", v)
-                print()
-            idx += 1
+        if args.json_reader == "dict" :
+            limit = (
+                args.limit 
+                or int(input(f"Limit output (press ENTER for {len(reader)}) items : ")) 
+                or len(reader)
+            )
+            idx = 0
+            while idx < limit :
+                key = f"id_{idx}"
+                reader_by_id = reader[key]
+                width = max(len(k) for k in reader_by_id)
+                print(f"=== {key} ===")
+
+                for k, v in reader_by_id.values() :
+                    print(f"{k:<{width}} : {v}")
+                print("-" * 50)
+                idx += 1
+        else :
+            print(reader)
+        return
 
     # Sortie
     if args.outputfile : 
