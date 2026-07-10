@@ -1,18 +1,65 @@
 """
-    Extraction des données depuis les fichiers csv ou excel.
-    Ecriture d'objet dict ou pd.DataFrame vers des fichiers json ou csv/excel
+    Outils de lecture, conversion et export de corpus annotés aux formats CSV,
+    Excel et JSON.
+
+    Permet de :
+    1. Lire un ou plusieurs fichiers CSV/Excel et les fusionner dans un unique
+        DataFrame pandas.
+    2. Sélectionner uniquement les colonnes utiles (métadonnées, annotations,
+        bursts, POS, chunks, etc.) et limiter le nombre de lignes chargées.
+    3. Convertir un DataFrame en dictionnaire structuré par couple
+        (ID, n_burst), avec prise en charge des annotations morphosyntaxiques
+        (POS) et des chunks BILOU.
+    4. Exporter les données vers les formats CSV, Excel ou JSON.
+    5. Lire un fichier JSON et le restituer sous forme de dictionnaire Python
+        ou de DataFrame pandas.
+
+    Usage
+    -----
+        python io_corpus.py inputpath [options]
+
+    Exemples :
+        python io_corpus.py corpus/
+        python io_corpus.py corpus.xlsx -o sortie.json -f json --is-tagged --is-chunked
+        python io_corpus.py corpus.csv -o sortie.xlsx -f excel
+        python io_corpus.py donnees.json --json-reader dict
+
+    Options utiles :
+        -o, --outputfile FILE      fichier de sortie
+        -f, --format {json,csv,excel}
+                                format d'export
+        --column COL [COL ...]     limiter les colonnes importées
+        --limit N                  limiter le nombre de lignes traitées
+        --json-reader {df,dict}    lire un fichier JSON comme DataFrame ou dict
+        --is-tagged                indique que le corpus contient les annotations POS
+        --is-chunked               indique que le corpus contient les annotations
+                                de chunks (BILOU)
+
+    Entrées acceptées :
+        - un fichier CSV (.csv)
+        - un fichier Excel (.xlsx)
+        - un dossier contenant plusieurs fichiers CSV et/ou Excel
+        - un fichier JSON (lecture uniquement)
+
+    Sorties :
+        - DataFrame pandas fusionné
+        - fichier CSV
+        - fichier Excel (.xlsx)
+        - fichier JSON structuré par burst
 """
 from pathlib import Path
 from typing import Literal
 from collections import defaultdict
 import pandas as pd
+import numpy as np
 import argparse
 
 METADATA = [
     "ID",   "input_corpus", "charge",	"outil",	"n_burst",	
     "debut_burst",	"duree_burst",	"duree_pause",	"duree_cycle",	
     "pct_burst",	"pct_pause",	"longueur_burst",	
-    "burst",    "token",   "pos", "chunk", "type_chunk",   "bilou", # BILOU
+    "burst",    "token",   "pos_stanza", "pos_correction", # POS stanza et après correction
+    "chunk", "type_chunk", "negation",  "bilou", # BILOU
     "startPos",	"endPos",	"docLength",	
     "categ",	"charBurst",	"ratio"
 ]
@@ -102,6 +149,7 @@ def df2dict(df:pd.DataFrame, is_tagged:bool=False, is_chunked:bool=False, for_so
         * is_chunked = True : if the df have runned `chunker`
     """
     results = {}
+    df = df.replace({np.nan: None, pd.NA: None})
     grouped = df.groupby(["ID","n_burst"])
 
     corpus_map = {
@@ -126,20 +174,22 @@ def df2dict(df:pd.DataFrame, is_tagged:bool=False, is_chunked:bool=False, for_so
         if "burst" in df.columns:
             result["burst"] = first["burst"]
 
-        if is_tagged and {"token","pos"}.issubset(df.columns):
+        if is_tagged and {"token","pos_stanza", "pos_correction"}.issubset(df.columns):
             result["token"] = group["token"].tolist()
-            result["pos"] = list(zip(group["token"], group["pos"]) )
+            result["pos_stanza"] = list(zip(group["token"], group["pos_stanza"]) )
+            result["pos_correction"] = list(zip(group["token"], group["pos_correction"]) )
             
         # Directement utiliser les fonctions chunk_type et chunk_bilou
-        if is_chunked and {"chunk", "type_chunk", "bilou"}.issubset(df.columns):
+        if is_chunked and {"chunk", "type_chunk", "negation", "bilou"}.issubset(df.columns):
             chunks = []
             current_tokens = []
             current_bilou = []
             # Corriger la partie token -> chunk 
             for _, row in group.iterrows():
                 token = row.get("token", row.get("burst",""))
-                bilou = row["schema_annot"]
+                bilou = row["bilou"]
                 chunk_type = row["type_chunk"]
+                negation = row["negation"]
 
                 if bilou in ["B","I"]:
                     current_tokens.append(token)
@@ -148,13 +198,13 @@ def df2dict(df:pd.DataFrame, is_tagged:bool=False, is_chunked:bool=False, for_so
                 elif bilou == "L":
                     current_tokens.append(token)
                     current_bilou.append(bilou)
-                    chunks.append((" ".join(current_tokens), "".join(current_bilou), chunk_type))
+                    chunks.append((" ".join(current_tokens), "".join(current_bilou), chunk_type, negation))
                     # Initialise à 0
                     current_tokens = []
                     current_bilou = []
 
                 elif bilou in ["U","O"]:
-                    chunks.append((token, bilou, chunk_type))
+                    chunks.append((token, bilou, chunk_type, negation))
 
             result["chunk"] = chunks
 
@@ -228,7 +278,7 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
 
 def main() :
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description="Outils de lecture, conversion et export de corpus annotés aux formats CSV, Excel et JSON.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         epilog="Pour extraire ou lire depuis un fichier excel, veuillez installer `openpyxl`"
         )

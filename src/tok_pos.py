@@ -1,8 +1,57 @@
 """
-    Test differents module of tokenisation, POS and chunk
-    Librairies : 
-        - stanza
-        - NLTK (chunk -> rule)
+    Tokenisation et annotation morphosyntaxique (POS tagging) d'un corpus de
+    production écrite à l'aide de Stanza, avec corrections linguistiques adaptées
+    au corpus étudié.
+
+    Le script permet de :
+    1. Tokeniser chaque burst (segment de frappe) avec Stanza.
+    2. Attribuer les étiquettes morphosyntaxiques (POS) d'origine produites par
+        Stanza.
+    3. Appliquer une série de corrections manuelles et automatiques pour traiter
+        les erreurs de POS, les expressions figées (ADV/ADP), les multi-word
+        tokens, les ponctuations, les clitiques, les fautes de frappe et certains
+        cas particuliers du corpus.
+    4. Produire un DataFrame où chaque token occupe une ligne, avec les colonnes
+        de tokenisation, POS d'origine et POS corrigées.
+    5. Ajouter un token spécial "&" entre deux bursts afin de matérialiser les
+        pauses d'écriture pour les traitements ultérieurs (chunking, analyses).
+
+    Usage
+    -----
+        python postagging.py inputpath [options]
+
+    Exemples :
+        python postagging.py corpus.csv
+        python postagging.py corpus.xlsx -o corpus_pos.csv -f csv
+        python postagging.py corpus.json -o corpus_pos.json -f json
+        python postagging.py corpus/ --limit 1000
+
+    Options utiles :
+        -o, --outputfile FILE      fichier de sortie
+        -f, --format {json,csv,excel}
+                                format d'export
+        --column COL [COL ...]     limiter les colonnes importées
+        --limit N                  limiter le nombre de lignes traitées
+        --is-chunked               indique que le corpus possède déjà les
+                                annotations de chunks (utile lors d'un export
+                                JSON)
+
+    Entrées acceptées :
+        - un fichier CSV (.csv)
+        - un fichier Excel (.xlsx)
+        - un fichier JSON
+        - un dossier contenant plusieurs fichiers CSV et/ou Excel
+
+    Colonnes ajoutées :
+        token            tokenisation du burst
+        pos_stanza       étiquette POS produite par Stanza
+        pos_correction   étiquette POS après corrections spécifiques au corpus
+
+    Sorties :
+        - DataFrame tokenisé et annoté
+        - fichier CSV
+        - fichier Excel (.xlsx)
+        - fichier JSON structuré par burst, avec les annotations POS
 """
 from read_write import *
 import stanza, torch, re
@@ -10,7 +59,13 @@ from tqdm import tqdm
 # import argparse
 # import pandas as pd
 
-def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
+use_gpu = False
+if torch.cuda.is_available() :
+    use_gpu = True
+
+nlp = stanza.Pipeline(lang="fr", processors="tokenize, pos, lemma, depparse", use_gpu=use_gpu)
+
+def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_idx:tuple, matches_dict:dict=None, nlp=None) -> tuple[list]:
     """
         Traite les mots d'une phrase stanza et les ajoute aux listes tok et postagging
     """
@@ -21,7 +76,7 @@ def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
     mwt = ["du", "des", "au", "aux"]
 
     las = [
-        "e", "ees", "é", "ée", "ées", 
+        "e", "ees", "é", "ée", "ées", "u", "es"
     ]
 
     word2token = {
@@ -34,6 +89,7 @@ def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
     while idx < len(sentence.words) :
         word = sentence.words[idx]
         token = word.text
+        stanza_pos = word.pos
         pos = word.pos
         surface = word2token[word.id].text
 
@@ -46,12 +102,12 @@ def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
 
         # Test pour les exceptions des POS
         if isinstance(token, str) and len(token) <= 3 :
-            if token.lower() in las or (len(token) == 1 and token not in ["y", "a", "à"] and pos not in ["PUNCT", "NUM", "SYM"]) :
+            if token.lower() in las or (len(token) == 1 and token not in ["y", "a", "à", "h"] and pos not in ["PUNCT", "NUM", "SYM"]) :
                 pos = "LAS"
             if idx+1 < len(sentence.words) :
                 pos_ap = sentence.words[idx+1].pos
-                if token.lower() in ["es", "a"] and pos_ap in ["VERB", "ADJ", "NOUN", "ADV"] :
-                    pos = "VERB"
+                if token.lower() == "a" and pos_ap in ["VERB", "ADJ", "NOUN", "ADV"] :
+                    pos = "AUX"
                 if token.lower() in ["ses", "d'"] and pos_ap == "NOUN" :
                     pos = "DET"
             
@@ -79,13 +135,13 @@ def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
                 pos = "DET"
 
         # Ajout d'un détail pour avoir les VP_cl
-        if pos == "PRON" and (word.deprel in ["expl:comp", "expl:pv"]) :
+        if pos == "PRON" and (word.deprel in ["expl:comp", "expl:pv", "iobj"]) :
             pos = "PRON_cl"
 
         # correction de certain pos=X
         if pos == "X" :
             if token == "a" :
-                pos = "VERB"
+                pos = "AUX"
             if idx+1 < len(sentence.words) :
                 token_ap = sentence.words[idx+1].text
                 pos_complet = nlp("".join(token+token_ap)).sentences[0].words[0].pos
@@ -97,11 +153,54 @@ def process_words(sentence, tok, postagging, matches_dict=None, nlp=None):
         if postagging and postagging[-1] == f"{pos}_1" :
             pos = f"{pos}_2"
 
+        # Détail des SYM (km/h où "/" = ADP et permis/voiture où "/" = CONJ)
+        if pos == "SYM":
+            if tok and tok[-1] == "km":
+                pos = "SYM_adp"
+            elif idx + 1 < len(sentence.words):
+                next_pos = sentence.words[idx + 1].pos
+                next_text = sentence.words[idx + 1].text
+                if next_text == "h":
+                    pos = "SYM_adp"
+                elif idx > 0:
+                    prev_pos = sentence.words[idx - 1].pos
+                    if prev_pos == "NUM" and next_pos == "NUM":
+                        pos = "SYM_adp"   # 3/4
+                    elif prev_pos == next_pos:
+                        pos = "SYM_conj"  # et/ou, permis/voiture
+        
+        # Correction des dates (chiffrés) -> NOUN de stanza
+
+        if re.fullmatch(r"\d+/\d+/\d+", token) and pos == "NOUN" :
+            pos = "NUM" 
+        
+        # Faute de frappe reconnu pour PRON_cl (unique)
+        if burst_idx == ("F+S17", np.int64(15.0)) and (pos == "PRON_cl" and token == "se") :
+            pos = "DET"
+        if burst_idx == ("F+S1", np.int64(14.0)) and (pos == "ADJ" and token == "crée") :
+            pos = "VERB"
+
+        # Correction pour des bursts précis
+        change_ou2adv = {("F+S17", np.int64(45)), ("F+S29", np.int64(76)), ("F-S19", np.int64(11)), ("F-S6", np.int64(42)), ("F-S9", np.int64(23)), ("P+S20", np.int64(39)), ("P-S19", np.int64(48)), ("P-S19", np.int64(57)), ("P-S24", np.int64(12)), ("P-S8", np.int64(63)), ("R+S3", np.int64(73)), ("R+S3", np.int64(75)), ("R+S3", np.int64(125)), ("R+S4", np.int64(54)), ("R-S10", np.int64(104)), ("R-S6", np.int64(1)), ("R-S7", np.int64(96))}
+        change_ou2cconj = {("F+S1", np.int64(4)), ("P-S21", np.int64(54)), ("R-S20", np.int64(17))}
+        change_es2verb = {("F+S19", np.int64(52)), ("F-S11", np.int64(15)), ("F-S28", np.int64(82))} # 4237 et 10534 sont des corrections
+        change_2unknow = {("F-S17", np.int64(38)), ("R+S9", np.int64(60)), ("F+S5", np.int64(28))}
+
+        if burst_idx in change_ou2adv and (pos == "CCONJ" and token == "ou") :
+            pos = "ADV"
+        if burst_idx in change_ou2cconj and (pos == "ADV" and token == "où") :
+            pos = "CCONJ"
+        if burst_idx in change_es2verb and (pos == "LAS" and token == "es") :
+            pos = "AUX"
+        if burst_idx in change_2unknow and ((pos == "CCONJ" and token == "ou") or (pos == "LAS" and token == "es")):
+            pos = "X"
+
         idx += 1
         tok.append(token)
+        origine_pos.append(stanza_pos)
         postagging.append(pos)
 
-    return tok, postagging
+    return tok, origine_pos, postagging
 
 FIXED_MARKER = "_mwe" # Multiword expression
 adv_path = Path(__file__).parent / "ressources" / "adv_fige.txt"
@@ -118,12 +217,13 @@ def _build_fixed_expressions(adv: list[str], adp: list[str]) -> list[list[str]]:
 
 FIXED_EXPRESSIONS = _build_fixed_expressions(adv_fige, adp_fige)
 
-def match_fixed_expr(matches:list, pos:str, burst, nlp):
+def match_fixed_expr(matches:list, pos:str, burst:str, idx_burst:tuple, nlp):
     tok = []
+    origine_pos = []
     postagging = []
     pos = pos.upper()
     match_dict = {f"__{pos}{j}__": r for j, r in enumerate(matches, start=1)}
-    pattern = "|".join(re.escape(r) for r in sorted(matches, key=len, reverse=True))
+    pattern = "|".join(re.sub(r"\\ ", r"\\s+", re.escape(r.strip())) for r in sorted(matches, key=len, reverse=True))
 
     # Split du burst en gardant les adv/adp figés comme séparateurs
     parts = re.split(f"({pattern})", burst, flags=re.IGNORECASE)
@@ -135,64 +235,63 @@ def match_fixed_expr(matches:list, pos:str, burst, nlp):
         # adverbe figé → 1 token, POS=ADV
         if re.fullmatch(pattern, part.strip(), flags=re.IGNORECASE) :
             tok.append(part.strip())
+            origine_pos.append(pos)
             postagging.append(f"{pos}{FIXED_MARKER}")
 
         # stanza
         else :
             doc_part = nlp(part.strip())
             for sentence in doc_part.sentences :
-                tok, postagging = process_words(sentence, tok, postagging, matches_dict=match_dict, nlp=nlp)
-    return tok, postagging
+                tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, idx_burst, matches_dict=match_dict, nlp=nlp)
+    return tok, origine_pos, postagging
 
-def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "pos"])->pd.DataFrame :
+def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "pos_stanza", "pos_correction"])->pd.DataFrame :
     """
         Tokenisation, POStagging with stanza of burst
     """
-    use_gpu = False
-    if torch.cuda.is_available() :
-        use_gpu = True
-
-    nlp = stanza.Pipeline(lang="fr", processors="tokenize, pos, lemma, depparse", use_gpu=use_gpu)
-
     dataframe["token"] = None
-    dataframe["pos"] = None
+    dataframe["pos_stanza"] = None
+    dataframe["pos_correction"] = None
 
     for i, burst in tqdm(
         enumerate(dataframe["burst"]),
         total=len(dataframe),
-        desc="POS tagging",
-        unit=" burst") :
+        desc="POS tagging",) :
 
         # Traitement des lignes d'espace/vide
         if pd.isna(burst) or str(burst).strip() == "" :
             burst = dataframe["charBurst"][i]
             burst_str = "" if pd.isna(burst) else str(burst)
             dataframe.loc[i, "token"] = ""
-            dataframe.loc[i, "pos"] = ""
+            dataframe.loc[i, "pos_stanza"] = ""
+            dataframe.loc[i, "pos_correction"] = ""
             if "⌫" in burst_str or "⌦" in burst_str :
-                dataframe.loc[i, "pos"] = "<SUPPR>"
+                dataframe.loc[i, "pos_correction"] = "<SUPPR>"
             elif "␣" in burst_str :
-                dataframe.loc[i, "pos"] = "<SPACE>"
+                dataframe.loc[i, "pos_correction"] = "<SPACE>"
             continue
-
+        
         tok = []
+        origine_pos = []
         postagging = []
 
         # Gestion des adverbes figés
         for pos, exprs in (("ADV", adv_fige), ("ADP", adp_fige)):
-            matches = [r for r in exprs if r and r.lower() in str(burst).lower()]
+            burst_norm = re.sub(r"\s+", " ", str(burst).lower()).strip()
+            matches = [r for r in exprs if re.sub(r"\s+", " ", r.lower()).strip() in burst_norm]
             if matches:
-                tok, postagging = match_fixed_expr(matches, pos, burst, nlp)
+                tok, origine_pos, postagging = match_fixed_expr(matches, pos, str(burst), (dataframe["ID"][i], dataframe["n_burst"][i]), nlp)
                 break
         else :
             adv_dict = {}
             doc = nlp(str(burst))
             for sentence in doc.sentences :
-                tok, postagging = process_words(sentence, tok, postagging, matches_dict=adv_dict, nlp=nlp)
+                tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, (dataframe["ID"][i], dataframe["n_burst"][i]), matches_dict=adv_dict, nlp=nlp)
 
         data = {
             "token" : tok,
-            "pos"   : postagging
+            "pos_stanza" : origine_pos,
+            "pos_correction"   : postagging
         }
 
         for nom_column in new_column :
@@ -230,12 +329,13 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
 
         if is_last :
             rows.append(pd.DataFrame([{
-                **{c : pd.NA for c in dataframe.columns},
-                "ID"      : dataframe["ID"][i],
-                "n_burst" : dataframe["n_burst"][i]+0.5,
-                "burst"   : "&",
-                "token"   : "&",
-                "pos"     : "<PAUSE>"
+                **{c : None for c in dataframe.columns},
+                "ID"             : dataframe["ID"][i],
+                "charge"         : dataframe["charge"][i],
+                "n_burst"        : dataframe["n_burst"][i]+0.5,
+                "burst"          : "&",
+                "token"          : "&",
+                "pos_correction" : "<PAUSE>"
             }]))
 
     dataframe = pd.concat(rows, ignore_index=True)
@@ -245,7 +345,11 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
 def main() :
 
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description="""
+            Tokenisation et annotation morphosyntaxique (POS tagging) d'un corpus de
+            production écrite à l'aide de Stanza, avec corrections linguistiques adaptées
+            au corpus étudié.
+        """,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         epilog="Pour extraire ou lire depuis un fichier excel, veuillez installer `openpyxl`"
         )
@@ -277,10 +381,12 @@ def main() :
             
 
     # Affichage
+    res = input(f"Limit output (press ENTER for {len(dico)}) items : ")
+    limit_arg = getattr(args, "limit", None)
     limit = (
-        args.limit 
-        or int(input(f"Limit output (press ENTER for {len(dico)}) items : ")) 
-        or len(dico)
+        limit_arg
+        if limit_arg is not None   
+        else (len(dico) if res == "" else int(res))
     )
     chunked = (
         args.is_chunked
@@ -292,10 +398,10 @@ def main() :
     while idx < limit :
         key = f"id_{idx}"
         dico_by_id = dico[key]
-        width = max(len(k) for k in dico_by_id)
+        width = max(len(k) for k in dico_by_id.keys())
         print(f"=== {key} ===")
 
-        for k, v in dico_by_id.values() :
+        for k, v in dico_by_id.items() :
             print(f"{k:<{width}} : {v}")
         print("-" * 50)
         idx += 1
