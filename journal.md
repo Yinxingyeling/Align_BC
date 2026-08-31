@@ -587,17 +587,17 @@ Pour régler ce problème, est-ce que dans la règle de grammaire, il faut ajout
 5. Ajout de tag pouvant être sélectionné en tant que PP pour régler les problèmes comme : *de mesurer* avec *mesurer* comme VP, prise en compte des VP_cl qui peuvent avoir le même cas (?)
 6. Dans le prétraitement avec stanza, ajout d’un détail pour les adverbes figés ⇒ pos = ADV_fixed
     De même pour les ADP → ADP_fixed
-7. A corriger, l’étiquetage des NUM semble quelques fois incorrecte
+7. A corriger, l’étiquetage des NUM semble quelques fois incorrecte <br>
     ![I identifié comme NUM (id 573)](img/I_num.png)
-8. Corriger les ADP seuls
+8. Corriger les ADP seuls <br>
     ![ADP seul](img/adp_seul.png)
-9. DET seul
+9. DET seul <br>
     ![DET seul à corriger pour qu'il y ait une étiquette chunk](img/id_88.png)
-10. Comment traiter km/h ? sachant que km=NOUN=NP, /=SYM=UNKNOWN, h=LAS=LAS
+10. Comment traiter km/h ? sachant que km=NOUN=NP, /=SYM=UNKNOWN, h=LAS=LAS <br>
     ![Comment traiter km/h](img/km_h.png)
 
 ### Correction postag
-Pour que les signes comme € ou % ne sont pas reconnus pour LAS
+Pour que les signes comme € ou % ne sont pas reconnus pour LAS <br>
     ![Les signes tagger SYM par stanza sont à garder](img/sym.png)
 
 ### Résultat final
@@ -624,3 +624,508 @@ df2csv(chunk_df, "data/chunks/df_excel.xlsx", format="excel")
 #### Sorties du test
 ![Sortie complète (chunk, postag) en tableau csv](img/res_csv.png)
 ![Sortie complète au format JSON](img/res_json.png)
+
+## Démarche suivante (16/06)
+- Plan pour la prochaine fois
+    - [ ]  Finir argparser
+    - [ ]  Ajouter un filtre
+    - [ ]  Finir main.py
+    - [ ]  Préparer la réunion de jeudi
+        - [ ]  Réunir les problèmes et questions rencontrées
+- argparser `main_script.py`
+
+## Préparation réunion 4 (17/06)
+- [x]  Affichage (`chunker_fr.py`)
+- [x]  Affichage (`tok_pos.py`)
+- [x]  Affichage (`reader_write.py`)
+- [ ]  Correction, prendre en compte les burst suivants dans le traitement des chunks
+- [x]  Filtre
+
+### Compte-rendu avant réunion 4
+#### Progression
+* Ajout d'un chunk `PP_brok` pour les DET et ADP seul
+* Correction du traitement de NUM qu'on considère pour NP
+* "de mesurer" entre dans le chunk `PP`
+* Correction du comptage BILOU pour les expressions figés. Les expressions figées valent 1 token au lieu de plusieurs.
+- Pour traiter les expressions figées, une précision a été faite dans les étiquettes POS (ADV et ADP)
+- Dans les étiquettes du POS, une autre précision a été faite pour les pronoms clitiques ⇒ `PRON_cl`
+- Correction de la reconnaissance de LAS pour que les signes (”€”, “%”…) soit bien tagger SYM (selon stanza)
+- Ajout d’une étiquette `UNKNOWN` pour traiter les étiquettes X ou SYM de stanza
+    - <m> = SYM → UNKNOWN
+    - et / ou = SYM → CONJ
+    - Permis / voiture → CONJ
+    - / grave → SYM / UNKNOWN
+    - à 99
+    % → NP U
+    - également une dépendance / une addiction → CONJ
+- Ajout d’une fonction pour filtrer (pas encore testé)
+
+#### Question
+* Garder ce traitement pour *km/h* ou bien regrouper ? Si nous regroupons, quel tag mettre pour POS et chunk ?
+    !["80km/" -> NUM/NP | "h" -> LAS](img/corr_km_h.png)
+
+## Réunion 4 (18/06)
+### Contexte de la réunion 
+- DET et ADP et PP_brok : utiliser BILOU pour montrer que c’est cassé
+    <br> ex : DET + ADP = BI
+- ADV_fixed → ADV_mwe (multiword expression)
+- ADP_fixed → ADP_mwe
+- NUM
+    - 15 à 25 ans → 15 (NUM) à 25 ans (PP)
+    - à 200 → PP
+    - Ce mois de juillet 2018 → Ce mois (NP) de juillet 2018 (PP)
+    
+    ⇒ NUM n’est pas la tête du chunk donc quand le pos suivant est un nom, il joue le rôle de DET, ainsi, il fait parti d’un chunk nominal (NP)
+    
+    ⇒ Quand le NUM est seul, il n’y a pas de tête de chunk, donc il garde comme tag NUM
+    
+- Pour le traitement des SYM
+    - \<m> = SYM → UNKNOWN <br>
+    Il y a pas de contexte dans lequel ce symbole peut signifier quelque chose. <br>
+    On dirait plutôt une faute de frappe, surtout les deux bursts suivant sont des frappes de suppression (au nombre de 3, assez pour supprimer ces trois caractères)
+    - également une dépendance / une addiction → CONJ
+    - Permis / voiture → CONJ
+    - et / ou = SYM → CONJ <br>
+    Il est possible de donner une signification syntaxique pour ce symbole. Dans ce burst le symbole “/” est interprété comme la conjonction “ou”
+    - / grave → SYM / UNKNOWN <br>
+    Sans contexte précis, nous ne pouvons trouver une signification syntaxique pour le symbole, ainsi, il est préférable de tagger comme SYM ou UNKNOWN
+        - à 99 <br>
+        % → NP U <br>
+        Il est utilisé comme un adjectif ou déterminant (ex: à la maison) ainsi, son type de chunk serait NP ou PP
+    
+    ⇒ Quand SYM fonctionne comme un nom, son type de chunk est nominal, par exemple quand il suit un chiffre = NP/PP
+    
+    ⇒ l’étiquetage de SYM dépendant 
+    
+- “*Il y a*” est aussi une expression figées qui fait parti d’un seul et même chunk (VP_cl ou VP si sans différence). Cependant, pour “*Il n’y a*”, l’ajout de la négation casse le groupe, l’étiquetage chunk serait : NP+ADP+VP.
+- km/h est aussi une forme figée que nous pouvons dans le chunk divisé en deux partie (NUM+km) + (/+h) avec NUM+km (NP) et /+h (PP) car le symbole “/” est interprété comme “par”, donc en tant que conjonction.
+
+### Questions rencontrées
+- Des biais (ou $\leftrightarrow$ où, a $\leftrightarrow$ à, es $\leftrightarrow$ est) dont nous ne pouvons intervenir directement dans le corpus. Nous ne pouvons que les montrer lors du prétraitement au niveau du POS (ajouter une marque pour dire qu’il y a une erreur d’orthographe). <br>
+    Cependant, vu le nombre d’occurrence total que nous avons, il est difficile de faire un prétraitement automatique, car nous ne savons si ces erreurs sont global sur tout le corpus ou juste que pour quelque occurrence. Pour ce cas là, il serait conseillé d’ajouter une nouvelle colonne de POS_correction_manuel pour corriger un à un ces erreurs. Ce genre d’erreur devrait être corrigé au niveau de stanza.
+- Est-ce qu’il y a besoin de différencier les NUM chiffre et écrit ? À l’écrit, les chiffres devraient tous être à l’écrit, cependant dans le corpus il n’y a pas souvent de distinction entre les deux usages. Pour ne pas se compliqué trop la tâche, surtout en raison de la limite de temps, nous n’irons pas dans les détails
+
+### But d'analyse de la recherche
+But final : **Voir comment s’aligne les bursts et chunks, est-ce qu’il y a une frontière entre les bursts et chunks ?**
+> Réponse d’amont : Pas de correspondance absolue
+
+Plan d’approche :
+1. Combien y’a-t-il de cas en correspondance ? Combien de cas sans correspondance
+2. Il y a des cas de correspondance entre frontière burst et chunk mais plusieurs chunk sont à l’intérieur d’un burst.
+    - Combien de cas en % pour chaque corpus (for, pla, rev, +/-)
+        - Les résultats par sous-corpus
+        - Le résultat du corpus entier
+3. Quel type de chunk il y a, avec et sans correspondance entre frontière burst et chunk ? <br>
+    Quel type de chunk ayant le cas de figure 2 où un burst a plusieurs chunk ?
+
+### Plan de la semaine prochaine
+- Corriger les chunks fautifs
+    - [x]  PP_brok → Unit_brok
+    ex : DET+ADP = BI (sans le L pour marquer qu’il n’est pas fini)
+    - [x]  NUM
+        - [x]  NUM (chunk_type) :  pour quand le numératif est seul
+        - [x]  “09/12/16” : NUM et garder comme NUM pour ckt (chunk_type)
+        attraper via `re`.
+        - [x]  NP/PP si entouré de nom
+    - [x]  SYM
+        - [x]  Si le symbole a une signification syntaxique, attribuer l’étiquette syntaxique en lien <br>
+        ex : et / ou = SYM → CONJ <br>
+        ex : 90% = NUM+NOUN ⇒ NP/PP
+        ⇒ peut être directement changé dans le POS
+        - [x]  Si aucune relation n’est trouvé dans son entourage, garder comme UNKNOWN ou SYM <br>
+        ex : \<m> = SYM → UNKNOWN
+    - [x]  NUM + km = NP
+    / + h = PP
+- Corriger le compte de BILOU
+Ajout d’un test pour les broken
+- Renomer les POS
+    - [x]  ADV_fixed → ADV_mwe
+    - [x]  ADP_fixed → ADP_mwe
+    - [x]  il y a : PRON+PRON_cl+AUX → VERB (?)
+- Vérifier le nombre d’occurrence des biais (ou $\leftrightarrow$ où, a $\leftrightarrow$ à, es $\leftrightarrow$ est) et proposer une démarche pour corriger les fautes si faisable
+    - Vérifier l’entourage des biais pour voir s’il est possible de faire une correction automatique à partir de ça
+    - Si il y’a pas bcp d’occurrence concernant, créer un automatisme qui corrigeant dans une nouvelle colonne les ID concerné
+    - S’il y a trop d’occurrence, et qu’il n’est pas possible de trouver un moyen automatique de corriger, écrire aux tutrices et se concerter lors de la prochaine réunion pour en décider de la démarche à suivre
+
+## Correction avec explication (19/06)
+
+- Pour *il y a*, ayant besoin de regrouper pour le chunk, mais ne sachant quel POS mettre pour le groupe, plusieurs possibilités :
+    1. regrouper *il y a* en 1 token (même traitement que pour les ADV / ADP figés), attribuer un POS=VERB et type syntaxique chunk = VP
+    2. garder séparer (chaque mot = 1 token ⇒ 3 tokens) et ajouter dans la reconnaissance des verbes clitiques les AUX ( `{<PRON>?<PRON_cl><VP|AUX>}` pour que l’auxiliaire *a* dans *il y a* soit pris en compte)
+- Renomer PP_brok en Unit_brok pour englober DET seul et ADP seul, ainsi il n’y a pas besoin de créer de faux catégories syntaxiques dans le traitement chunk. Utiliser BILOU pour montrer que ce sont des unités cassées (manquant leur suite) <br>
+    Par exemple, lorsque l’Unit_brok n’a qu’un token, nous metton B (Begin) explicité d’une certaine suite inconnu qui peut être présent dans le burst suivant (après la pause). Un même traitement avec plus d’un token, à la différence que cette fois-ci, nous ajoutons le signe I (Inside) après B. Le nombre de I dépendra du nombre de token présent total -1 (il faut enlever un token pour l’identifier comme B)
+- Selon 2.2 Le French Treebank (FTB) et ses étiquettes (Isabelle Tellier, Iris Eshkol-Taravella, Yoann Dupont, Ilaine Wang, « Peut-on bien chunker avec de mauvaises étiquettes POS ? », *21ème Traitement Automatique des Langues Naturelles*, Marseille, 2014, page 3), un groupe prépositionnel prend comme tête une préposition et est la plupart du temps suivi d’un groupe verbal ou nominal. Ainsi, pour régler le problème des prépositions qui ont du mal à intégrer les groupes de grammaire syntaxique (chunk), j’ai choisi de considéré un ou plusieurs préposition à la suite comme groupe prépositionnel sans qu’il soit obligé d’avoir un VP ou NP à la suite.
+- Pour certains SYM, renomer avec une précision sur son utilisation syntaxique pour avoir un traitement chunk plus conforme et détaillé, ainsi les SYM ne seront pas tous reconnus comme UNKNOWN.<br> 
+    Le choix de la précision est simple, selon la traduction du SYM en langue naturel, nous distinguons si c’est un usage plutôt prépositionnel (km/h), nominal (90%) ou conjonctionel (et/ou). Le reste, lorsque nous ne trouvons de signification concrète en langue naturel, nous le classons dans UNKNOWN.
+- La reconnaissance des nombres (NUM) par stanza s’avère quelque fois fautif. Lorsqu’il analyse une suite de chiffre représentant une date (ex: 19/06/26) le pos attribué est NOUN, or en réalité ce sont des NUM séparé de SYM que nous classons en NER (Reconnaissance des Entitées nommées) comme date. Cependant, il n’est pas cohérent de mélanger de la syntaxique (POS) à la sémantique (NER). Ainsi, nous avons choisi de corriger le pos d’origine par NUM, qui est plus adéquat et pour l’étiquetage chunk, des corrections ont été apporté sur ce point aussi. <br>
+    Quelques légères modifications ont été apporté dans la règle grammaticale de l’étiquetage chunk. Tout d’abord, nous avons ajouté une nouvelle étiquette NUM pour toutes les situations où le numéral se trouve dans un burst sans relation nominal. Avant cela, tous les NUM étaient considéré comme des groupes nominaux (NP). Ainsi, cela nous amène à changer la reconnaissance des nombres en tant que NP. Pour qu’un NUM soit marqué pour NP, il doit obligatoirement comporter un POS NUM et un SYM (ex: 90%) ou bien qu’un NUM soit suivi d’un nom (NOUN), pronom (PRON / PRON_cl) ou nom propre (PROPN) (ex: 25 ans). Ou encore qu’il soit similaire à un ADJ, donc précédant l’un de ces dernières étiquettes (ex: article 5).
+
+### Correction -- problème
+* Le traitement pour *km/h* de stanza n'est pas unifié. La plupart du temps, il le traite : km = NOUN, / = SYM, h = NOUN
+
+### Idée de traitement pour chunker sur tout 
+- Ranger tous les pos dans une grande liste avec un tuple de séparation nous permettant de savoir à quel id il appartient.
+- Remettre en burst en comparant le nombre de tuple de pos dans un burst et le nombre de slots dans le chunk (compter bilou au lieu des tokens).
+    - On itère globalement sur la liste de tuple de pos, lorsqu’on rencontre un tuple d’ID, alors on change l’ID du dico (pour faire l’append) 
+
+    ⇒ Ainsi, il faut mettre l’ID au devant
+        
+        ```python
+        		chunk_par_id = {}
+            pos_id = []
+            pos_complet = []
+            for k in dico.keys():
+                pos_comp = [
+                    tuple(t)
+                    for t in dico[k]["pos"]
+                    if len(t) >= 2
+                    and t[1] not in ["<PAUSE>", "<SUPPR>", "<SPACE>", "", " "]
+                    and not (isinstance(t[1], float) and pd.isna(t[1]))
+                ]
+                creation_pos_id = [(f"ID_pos_{k}")] + pos_comp
+                pos_id.append(creation_pos_id)
+                pos_complet.append(pos_comp)
+            chunk_par_id[k] = chunk_bilou(chunk_type(pos_complet)) if pos_id else []
+        ```
+        
+    - Si `len(tuple(pos)) > len(bilou)` alors on vérifie si les tokens du tuple sont présent dans le groupe de chunk, si oui, on le mets dans la liste de chunks du dict de l’id en question (vérifier l’id avec la liste `pos_id`.
+    - Si `len(tuple(pos)) > len(bilou)` alors on vérifie si les tokens du tuples sont présent dans le chunk, si oui, on le met dans la liste (?) <br>
+    Attention, si le chunk suivant contient le token mais qu’il ne fait pas parti de ce groupe de token restant !
+    ⇒ ajout d’un test d’amont pour voir si le nombre de bilou total correspond au nombre complet de tuple de pos (?)
+    - Sinon on passe au prochain groupe de chunk.
+
+### Plan  suivant
+- [ ]  Vérifier les corrections apporter (chunk et pos)
+    - [ ]  Unit_brok 〰️
+    - [x]  ADV/ADP_mwe
+    - [x]  SYM
+    - [x]  NUM
+    - [x]  il y a ❌
+    - [x]  km/h (avec h=NOUN et non LAS)
+- [ ]  Corriger l’utilisation des comandes `python chunker_fr.py chunk -b` pour que les arguments donnés soient reconnus comme liste de tuple (à faire pour -b et -ck)
+La correction doit être faite pour `chunker.py` et `main.py`.
+- [ ]  Vérifier les différentes sorties (sans / avec export) (csv, json, excel)
+    - [x]  csv (dossier → traitements → csv)
+    - [x]  json
+    - [x]  excel
+- [x]  Vérifier les différentes fichiers ou dossier d’entrée(s)
+- [x]  Vérifier l’affichage classique
+- [x]  Vérifier la commande filter
+- [ ]  Faire le dernier point de **Plan de la semaine** en ajoutant un autre biais (sur $\leftrightarrow$ sûr)
+
+## Correction chunk -- NUM SYM (20/06)
+**Biais**
+* '*es*' est reconnu comme VERB alors que c'est la suite d'une production de '*Les*'séparé par une ligne de suppression (l.42)
+
+**Correction**
+* ADP seul et Unit_brok (l.118) <br>
+    ![de=ADP PP | ces=DET Unit_brok | <PAUSE>](img/adp+unit_brok.png)
+* NUM et km/h
+    <br> ![km=NOUN=NP U| /=SYM_adp=PP B| h=NOUN=PP L](img/1-num_kmh.png)
+    <br> ![-100km/h=NOUN=NP U](img/2-num_kmh.png)
+    <br> ![six=NUM=NP B | décembre=NOUN=NP L | ce=DET=NP | 6=NUM=NP I | décembre=NOUN=NP = L](img/3-num.png)
+    <br> ![Date : Actualité=NP U | du=ADP=PP U | 09/12/16=NUM=NUM U](img/4-num_date.png)
+* SYM
+    <br> ![de=ADP=PP B | 180=NUM=PP I | €=SYM=PP L](img/1-sym_euro.png)
+    <br> ![%=SYM=UNKNOWN](img/2-sym_pourcent.png)
+    <br> ![Permis=NOUN=NP | /=SYM_conj=CONJ | voiture=NOUN=NP](img/3-sym_conj.png)
+* Changer le traitement automatique de : "le(s) plus/moins"
+    <br> ![les=DET=Unit_brok U | moins=ADV=AP B | dangereuses=ADJ=AP L](img/le_s+-.png)
+
+## Correction chunk -- PRON_cl LAS (22/06)
+
+* Enelever `PRON_cl` de `NP`, sinon `VP_cl` ne sera jamais reconnu car `PRON_cl` seront toujours étiqueté pour `NP` avant.
+    * Problème : Les `PRON_cl` seuls (souvent en raison d'une faute d'orthographe "se" -> "ce" l.3688)
+    * Il existe des cas où il y a un `PRON_cl` avant un PRON (l. 14897 "s'en rendent compte")
+* `DET+ADJ` après correction des `PRON_cl`, il sera compté pour `AP`, or dans ce contexte, il devrait être NP car il désigne une chose ultérieure.
+    !["cette dernière"](img/cette_derniere.png)
+* il peut exister plusieurs pronoms clitiques à la suite 
+* [ ] Vérifier tous les LAS (surtout ceux qui pourrait être des DET ou ADV)
+    * Une petite partie des DET qui dans la sortie finale, ont été séparé de leur signe (ponctuation) indiquant leur POS
+* [ ] Corriger la sortie JSON : les cellules vides posent problèmes pour l'affichage JSON <br>
+    Les `pd.NA` et `np.nan` ont été changé par `None` pour que json puisse auto-convertir en **null** (vide supporté par json). Ainsi, le filtre interne du navigateur de json peut fonctionner.
+    ```bash
+    python main_script.py process ../data/corpus/ -p -c -o ../data/chunks/jsonTest.json -f json
+    ```
+
+A vérifier 
+-
+* [ ] La sortie json pour le filtre
+* [x] Tester plusieurs colonnes ou items sélectionnés
+
+## Biais et problème suite aux fautes de frappe (23/06)
+
+### Problèmes -- les décalages et non reconnus
+* ADV_mwe n'est pas reconnu
+* "se" -> "ce" : faute de frappe qui fait qu'un DET est reconnu comme PRON_cl
+* "u" seul a été reconnu pour "du" (à+le=du)
+* Décalage des chunks avec les tokens. 
+    <br> ![les tokens impossible à traiter par le chunker ont été skip](img/decalage_chunk.png)
+* Décalage des colonnes 
+    <br> ![en milieu de lignes (l.1000+) pour un certain burst, les colonnes ont été décalé d'un cran](img/decalage_colonne.png)
+
+### Biais 
+* se -> ce : un seul existant
+* ou
+    * ou -> où : 18/370
+    * ou -> au : 1/370
+    * ou -> ??? : 2/370
+* où -> ou : 3/58
+* es 
+    * es -> est : 5/149
+    * es -> LAS : 90%
+    * es -> et : 1/149
+* est -> xxx : ?/1003
+* a -> xxx : ?/778 
+* à -> a : 19/1026
+
+### Nouveautés
+* Fonction `python main_script.py filter` qui permet de filtrer les items et les colonnes 
+* Ajout d'une colonne `chunk`, un ligne est un groupe syntaxique (=chunk).
+    <br> ![ex: L'arrêt du tabac est == [L'arrêt] [du tabac] [est]](img/new_chunk_line.png)
+
+## Réunion 5 (24/06)
+### Compte rendu
+- VP : <br>
+    *marche, elle marche, ne marche pas, elle ne marche pas, a marché, elle a marché, elle n'a pas marché, elle a bien marché, elle n'a pas bien marché*
+    <br>
+    ajouter une colonne pour préciser s’il y a la négation ou non (0/1)
+    <br>
+    → pour faciliter la tâche, nous avons décidé de ranger tout ce qui consitue un VP ensemble sans distinction de ceux qu’il y a à l’intérieur (adv, adp…). Au besoin de nos analyses, nous allons ajouter une colonne pour préciser l’existance de la négation. Si 0, il n’y a pas de négation, sinon 1.
+    <br>
+    ⇒ Ce choix a été fait par rapport aux statistiques que nous devons faire plus tard. En raison d’une limite de temps (stage de 2 mois), nous avons choisi la façon la plus simple a mettre en place et le plus cohérent avec les conventions déjà présentes.
+    
+- Marquer une certaine continuité via BILOU pour les PP cassé
+    - Par exemple pour “la plus” qui est un chunk incomplet si la tête existe, sinon on étiquette comme UNKNOW
+- Pour les caractères impossibles à interpréter (DET seul ou LAS…) utiliser UNKNOW pour suivre les règles du chunk et ne pas ajouter de nouvel étiquette pour encombrer nos règles.
+- Pour les NUM qui sont à l’intérieur d’un PP ou NP, les considéré comme NOUN ou DET, s’ils sont seul sans entourage, les étiqueter comme NUM.
+- Corriger certains biais dans le POS qui puisse nuire à l’étiquetage chunk
+    - à $\leftrightarrow$ a
+        - a → prép : avant un NP et après un DET
+    - ou $\leftrightarrow$ où
+    - es → LAS car près de 90% des es sont des oublis/ajouts de révision ou production.
+        - les rares fois où les “es” sont VERB ou AUX, apporter une modification (?)
+- Refaire la fonction chunk pour qu’il fasse sans les pauses (similaire au postagging) puis ajouter les pauses selon les bursts.
+
+### Hypothèse d'analyse
+
+Si l’hypothèse est forte, alors il y a une correspondance absolu entre les burst et chunk. Si c’est vrai, les frontières entre burst et chunk devrait correspondre. Cependant, c’est faux, selon les étude déjà faite mais aussi car nous savons qu’il y a plusieurs type de burst (par exemple, les chunks incomplet du aux burst de révision)
+
+Plusieurs cas d’approche pour répondre à notre hypothèse :
+
+- les cas de correspondance et de non correspondance entre les frontières
+- combien de cas avec correspondance ?
+- on ajoute une information, nous prenons les chunk avec différents types de burst (P, RP, R). Combien y’a t il de cas avec/sans correspondance ?
+- Ensuite, nous regardons les types de chunk
+    - on prend un ensemble de chunk et un type de burst ppour quand les frontières correspondent et les frontières ne correspondent pas.
+- Certains nombres de variable qui change la segmentation, donc prendre à tour de rôle les variables pour mieux comprendre
+- Un burst a plusieurs chunk, quel type de chunk sont à même d’aboutir pour faire les types de burst long (normalement un burst de production P)
+
+### But d'analyse
+But final : **Voir comment s’aligne les bursts et chunks, est-ce qu’il y a une frontière entre les bursts et chunks ?**
+
+Réponse d’amont : Pas de correspondance absolue
+
+Plan d’approche :
+
+1. Combien y’a-t-il de cas en correspondance ? Combien de cas sans correspondance
+2. Il y a des cas de correspondance entre frontière burst et chunk mais plusieurs chunk sont à l’intérieur d’un burst.
+    - Combien de cas en % pour chaque corpus (for, pla, rev, +/-)
+        - Les résultats par sous-corpus
+        - Le résultat du corpus entier
+3. Quel type de chunk il y a, avec et sans correspondance entre frontière burst et chunk ?
+    <br> 
+    Quel type de chunk ayant le cas de figure 2 où un burst a plusieurs chunk ?
+
+### Correction à apporter 
+- [x]  UNKNOW : séquence de caractères avec plusieurs possibilité d’interprétation
+- [ ]  BI : pour les chunk incomplets
+- [x]  NUM dans NP/PP
+- [ ]  le plus : UNKNOW + BI
+- [ ]  les temps composés/négation… : VP
+    
+    ```python
+    grammar = 
+    """
+        VP : 
+            {}
+    """
+    ```
+    
+- [x]  Correction biais
+    - [x]  a $\leftrightarrow$ à
+    - [x]  ou $\leftrightarrow$ où
+    - [x]  es → UNKNOW
+    - [x]  est : non touché
+
+## Plannification et idée de correction (25/06)
+### Plan
+
+- [x]  Fonction chunk (2-5 jours)
+- [x]  Corrections (1 jour)
+    - [x]  Ajout d’une colonne `correction_pos` pour les corrections apporté sur la base de stanza
+    - [x]  Changer les étiquettes chunk
+        - [x]  VP
+        - [x]  UNKNOW
+    - [x]  changer BILOU pour les incomplets
+- [ ]  Statistique
+    - [ ]  Diviser les fichiers
+        - +/-
+        - R/F/P
+        - (R/F/P) (+/-)
+
+⇒ 11 jours avant la prochaine réunion
+
+### Idée de correction -- chunker
+## Idée pour chunking
+
+- Créer une liste qui range tous les tuples (token, pos), en supprimant SUPPR, SPACE, PAUSE et ceux qui sont vides (mais normalement, ils ont tous un pos)
+- Passer la liste dans le chunker ⇒ une liste de chunk complet
+- Calculer selon le nombre de token dans le burst et dans le chunk puis comparer
+
+## Corriger le chunker 1 (26/06)
+- Correction de chunker_fr sur un fichier csv postagger et explode
+- Correction de la fonction chunker pour qu’il chunk sur tous les burst sans séparation
+    - Revoir cette partie
+    ```python
+    print(idx)
+    print(f"Token : {token} \n Pos_list : {pos_list}")
+    ck_total = []
+    ck_count = 0
+    tok_count = len(token)
+
+    for one_ck in ck_complet :
+        tok_of_ck,_,bilou_of_ck = one_ck
+        print(f"ck_count : {ck_count} | tok_count : {tok_count}")
+        print(f"ck_total : {ck_total}")
+        ck_count += len(bilou_of_ck)
+        ck_total.append(one_ck)
+        ck_complet = delete_first(ck_complet)
+
+        if ck_count >= tok_count:
+            break# passe au prochain burst
+    ```
+Observation 
+-
+Il existe des bursts vident sans plus d’information dans le charBurst
+    - 4193,4195, 13119, 13121, 22852
+
+## Corriger le chunker 2 (29/06)
+### Correction `chunker`
+- Correction de la fonction `chunker` pour que le chunker marche sur tous les burst ensemble.
+    
+    Problèmes rencontrés entre temps : 
+    
+    - Lorsqu’on passe directement un fichier csv déjà taggé à la fonction, les lignes de pos vides (`(None, None)`) ne sont pas itérable pour la création d’une liste de tous les tuples de `(token, pos)` de nos données pour tous traiter
+    - Les lignes vides et les pauses n’ont pas été implémenté comme voulu, pour cela, il a fallu changer le traitement qui été sur les tokens par les tag du POS et ainsi voir si le POS en question correpond à un vide ou non. Si oui, mettre les tag identique au POS pour marquer le vide ou la pause (SUPPR, SPACE, PAUSE)
+        
+        ![Décalage entre les colonnes token pos | chunk type_chunk bilou : mauvaise implémentation du vide et pause](img/vide_pause.png)
+        
+    - Pour un chunk qui chevauche sur deux burst, le résultat d’une première version de test ne prend pas en compte le chevauchement, il case le chunk en question que sur les tokens à la fin du premier burst et pour le début du deuxième burst, il met les chunk suivant.
+        
+        ![un chunk qui chevauche sur deux burst (avec la séparation &), le montrer par BILOU](img/chunk_chevauche.png)
+        
+    - Après une correction, le deuxième test réussi à faire dépasser le chunk en question jusqu’au deuxième burst, sauf qu’il ne prend pas en compte des tokens auxquels il avait matcher au burst précédent et réinitialise le compteur qui compare le nombre de token du chunk au nombre de tokens dans le burst.
+        
+        ![La colonne chunk présente aussi le chevauchement en "gardant en mémoire" les tokens du chunk du burst précédent](img/chevauche_withTokenPrecdt.png)
+        
+    - Ajout d’un autre compteur (offset) dans chaque tuple de chunk pour pouvoir compter le nombre de fois qu’il a été utilisé, ainsi le chunk ne déborde pas sur le prochain chunk quand il traite un chunk qui chevauche sur deux bursts.
+    
+    Résultat final :
+        ![Résultat final après toutes les corrections](img/chevauche_finalResult.png)
+
+### Idée de correction postagger
+- Sachant que `postagging` est une liste des pos du burst complet, nous pouvons créer une liste qui range toutes les pos du burst de stanza sans correction et le ranger sous un autre nom dans le dictionnaire et dans une nouvelle colonne (pos_stanza)
+- Modifier `METADATA` en ajoutant le nom de la nouvelle colonne et en modifiant celui de l’ancienne si besoin
+- Modifier la clé qui garde les pos des autres fonctions qui traitent pos (chunker, filter, read_write)
+- Vérifier la sortie
+
+## Corriger postagger et chunker (30/06)
+Plan détaillé postag
+-
+- Modifier le script pour qu’il y ait deux colonnes/clés pour les POS, un qui range ceux de stanza et l’autres ceux après correction
+
+Plan de correction chunk
+-
+- Ranger tous les groupes verbeaux avec leurs modifieurs ou autre dans VP = 1 chunk
+    - Ajouter un test pour voir s’il y a la négation à l’intérieur du chunk, si oui, dans la colonne négation (nouvelle colonne à créer) mettre 1, sinon 0.
+- Nommer les restes, c’est-à-dire, ceux dont nous ne pouvons étiqueter avec les étiquettes syntaxiques conventionnelles, pour UNKNOW (cette catégories ranges les LAS, X…)
+
+## Corriger postagger et chunker 2 (01/07)
+- Renommer la colonne `pos` par `pos_correction` et ajouter une colonne `pos_stanza` pour pouvoir connaître les correction apporté au POS.
+- Correction de décalage en raison des lignes vides (id_4193 et id_4195)
+- Correction des décalages dü aux expressions figées qui n’ont pas été reconnu en raison des espaces en trop entre (ex: “En␣␣effet”)
+- Correction des biais (POS)
+    - ou → où    18/370 → changer
+        - id_1217, id_2811, id_5173, id_7085, id_7416, id_9503, id_13233, id_13251, id_13985, id_15879, id_18992, id_18996, id_19095, id_19214, id_20679, id_24274, id_24600 
+        - ou → au      1/370 → UNKNOWN
+            - id_4967
+        - ou → ???    2/370 → UNKNOWN
+            - id_20207
+        - où → ou      3/58 → changer
+            - id_6 = CCONJ
+            - id_13609 = CCONJ
+            - id_22655 = CCONJ
+        - es → est     5/149 → corriger pour est
+            - id_1443 = VERB/AUX
+            - id_4237 = VERB/AUX mais le prochain burst est “t” une forme de reprise, est-ce qu’il y a besoin de corriger le POS ?
+            - id_4259 = VERB/AUX
+            - id_6517 =VERB/AUX
+            - id_10534 ⇒ les prochains bursts sont des correction, donc pas besoin de corriger
+        - es → LAS   90%  → tout mettre pour UNKNOW
+           <br> es → et       1/149 → UNKNOWN
+            - id_3451
+- Ajout d’un colonne `negation` pour marquer l’existance d’une négation dans un chunk VP ou non
+
+A vérifier :
+- Corrigé, pos_stanza et pos_correction n’était pas rempli
+
+Pour demain :
+
+- Corriger le problème des biais dans le postagging
+- Vérifier et corriger le problème des négations dans chunking
+
+## Correction biais et négation (02/07)
+- Correction des biais : changer les conditions de test de correction du numéro id (clé json) par des tuples de paires (ID, n_burst).
+- Correction de la négation dans le chunk, quand un chunk VP contient la négation, il se repère d’un 1 dans la colonne `négation` sinon 0.
+- Quelques modifications apporté dans le chunk VP, pour différencier les adverbes de degrès aux adverbes de négation (ex: plus)
+
+## Correction et analyse (03/07)
+Correction 
+-
+* Décalage en raison d'une expression figée qui se trouve dans deux burst à la suite
+* Correction faute de frappe : unknow -> unknown
+* Rédaction de la documentation des codes
+
+Analyse : correction du code
+- 
+Correction du script :
+
+- Par rapport au nombre de burst total, dans ceux calculés, il manque près de la moitié des burst. Après vérification, lors de l’ajout des tag <PAUSE>, la colonne `charge` n’a pas été précisé, de ce fait, pour ces lignes, les cellules sont vide (NAN), or pendant le chargement des données pour le calcul des analyses, nous avons besoin de regrouper selon plusieurs colonnes dont `charge`. Ce blanc provoque donc un regroupement de tous les <PAUSE> en un seul, c’est pour cela qu’il manquait près de la moitié des données dans nos résultats.
+- Toujours avec le tag <PAUSE>, après la correction avec `charge` (ajout de données dans le prétraitement pour ce tag), le script d’analyse considère chaque <PAUSE> comme un burst à part entière. Ce problème vient du fait que nous regroupement par `n_burst`, cependant, pour ne pas perdre ces données lors d’un regroupement (`pd.groupby()`) au niveau du prétraitement (pos ou/et chunk) nous avons volontairement ajouté 0.50 sur la base du burst précédent (un réel burst enregistré au moment du processus d’écriture en temps réel).
+De plus, un autre problème survient avec ce tag. Dans la partie qui répond à notre troisième approche (`[4/7]`), nous remarquons que le tag <PAUSE> n’apparaît qu’une fois dans le tableau de correspondance/non correpondance définit par les type de chunk. Or, nous savons que chaque <PAUSE> correspond bien à une séparation de burst, ainsi ce résultat est faussé. Cet erreur vient aussi d’un problème de regroupement, car pour ce tag, la colonne `chunk` est vide, ce qui fait que pandas compte toutes ces lignes pour un seul.
+ Pour contourner ces problèmes, sans avoir a corriger dans le prétraitement, dans `charger_donnee()`, nous avons retirer les bursts séparateurs (<PAUSE>) avant les analyses et dans `construire_table_chunks()` nous dédupliquons correctement les lignes vides (NaN) dans la colonne chunk via la colonne `startPos`.
+- Quand nous comparons le compte des tags <SUPPR> et <SPACE> du résultats avec celui du fichier CSV après traitement, nous remarquons que dans nos résultats, le nombre est inférieur à ce que nous avons réellement dans le fichier CSV. Après plusieurs tests de vérification, nous observons que la déduplication seulement par la colonne `startPos` n’était pas suffisante, car il existe des lignes dons ces données sont identiques sans être le même tag ou encore du même ID. Pour cela, sur la base de la correction précédente, nous ajoutons la condition `ID` en plus de `startPos` pour la déduplication. Avec cet ajout, nous sommes sur que même si un même `startPos` est repris, ils ont des `ID` unique.
+
+## Réunion 6 (06/07)
+- Enlever “que” (ADV) de NP
+- “là (ADVP) ou (ADVP) celle (NP) des autres (PP) commencent (VP)”
+- revoir VP et ADV
+- Analyse par type de burst (P/R/RB)
+- Connaître la configuration des chunks (si VP+NP …) à faire par rapport au type de chunk dans les bursts
+- Pour les chunks multi
+
+## Rédaction (07/07)
+Rédaction du journal de bord : récapitulatif des informations de la réunion dernière et des problèmes/corrections apportés lors des semaines dernières.
+
+## Rédaction 2 (08/07)
+Mise au propre du `journal.md` sur github jusqu'à la semaine du 15/06. Ajout d'image et de lien plus parlant.
+
+## Aménagement github (09/07-10/07)
+* Suppression de certains correctifs et mise en ligne sur la branche main de github
+* Réorganisation des commits de la branche test pour à la suite avoir une branche main propre et lisible.
+* Suppression de fichiers et codes inutiles dans le dépôt local (sauvegarde en ligne -- journal de bord)
+
+## Reprise chunker (13/07)
+* Vérification des règles de la syntaxe chunk via les documents envoyés par Mme Taravella
+* Extraire les syntaxes problèmatiques du résultat précédent (fichier csv).
