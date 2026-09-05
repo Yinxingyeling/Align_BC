@@ -52,7 +52,7 @@ from typing import Literal
 from collections import defaultdict
 import pandas as pd
 import numpy as np
-import argparse
+import argparse, csv
 
 METADATA = [
     "ID",   "input_corpus", "charge",	"outil",	"n_burst",	
@@ -269,6 +269,8 @@ def df2csv(dataframe:pd.DataFrame, path:Path|str, column:str|list[str]|None=None
     
     dataframe.to_csv(
         path_or_buf=path,
+        sep=";",
+        quoting=csv.QUOTE_ALL,
         columns=column,
         encoding="utf-8",
         index=False

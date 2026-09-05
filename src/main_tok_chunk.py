@@ -182,7 +182,7 @@ def main() :
         if args.chunker :
             if not args.postagger :
                 dico = df2dict(df, args.is_tagged)
-            df, dico = chunker(dico, True)
+            df, dico = chunker(dico, to_df=True)
         
         # Affichage JSON
         if args.json_reader :

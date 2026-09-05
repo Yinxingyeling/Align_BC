@@ -88,7 +88,7 @@ import nltk.chunk as ck
 
 NEG_ADVERBS = {
     "pas", "plus", "jamais", "rien", "guère", "point",
-    "aucunement", "nullement", "personne", "goutte", "mie"
+    "aucunement", "nullement", "personne", "n'", "ne"
 }
 
 def _mark_neg_adv(tagged: list[tuple]) -> list[tuple]:
@@ -131,7 +131,7 @@ def _mark_postnominal_coord_adj(tagged: list[tuple]) -> list[tuple]:
 
 DEGREE_ADVERBS = {
     "plus", "moins", "aussi", "si", "très", "trop", "bien",
-    "assez", "peu", "tellement", "davantage"
+    "assez", "peu", "tellement", "davantage", "vraiment", "extrêmement"
 }
 
 def _mark_degree_adv(tagged: list[tuple]) -> list[tuple]:
@@ -152,6 +152,75 @@ def _mark_degree_adv(tagged: list[tuple]) -> list[tuple]:
             marked[i] = (word, "ADV_deg")
     return marked
 
+def _clitique_sujet_postpose(tagged:list[tuple]) -> list[tuple] :
+    """
+        Reprendre les clitiques à sujets postposés
+        pour qu'ils soient inclut pour VP et non VP+NP
+        ex : est-ce, aurait-il... 
+    """
+    marked = list(tagged)
+    n = len(tagged)
+    for i, (word, tag) in enumerate(tagged): 
+        if tag not in ("VERB", "AUX") :
+            continue
+        if word is None :
+            continue
+        next_tag = tagged[i + 1][1] if i + 1 < n else None
+        next_word = tagged[i + 1][0] if i + 1 < n else None
+        if next_tag == "PRON" and "-" in next_word :
+            marked[i + 1] = (next_word, "PRON_cl")
+    return marked
+
+def _pronom_fixed(tagged:list[tuple]) -> list[tuple] :
+    """
+        Corrige pour l'expression "n'importe quoi"
+    """
+    marked = list(tagged)
+    n = len(tagged)
+    for i, (word, _) in enumerate(tagged) :
+        if word not in ("n'") :
+            continue
+        if word is None :
+            continue
+        next_word = tagged[i + 1][0] if i+1 < n else None
+        next_tag = tagged[i + 1][1] if i+1 < n else None
+        _2next_word = tagged[i + 2][0] if i+2 < n else None
+        if (next_word == "importe" and next_tag == "VERB") and (_2next_word in ("qui", "quand", "quoi")):
+            marked[i + 2] = (_2next_word, "PRON_fixed")
+    return marked
+
+PREDET_QUANT = {"tous", "toutes"}
+
+def _mark_predeterminer(tagged: list[tuple]) -> list[tuple]:
+    """
+    Re-tague (ADJ|PRON -> DET_pre) 'tous/toutes' quand il précède
+    immédiatement un DET, pour qu'il forme un seul NP avec le
+    groupe nominal qui suit ("tous les ans") plutôt que d'être
+    happé par le PP précédent.
+    """
+    marked = list(tagged)
+    n = len(tagged)
+    for i, (word, tag) in enumerate(tagged):
+        if word is None or word.lower() not in PREDET_QUANT:
+            continue
+        next_tag = tagged[i + 1][1] if i + 1 < n else None
+        if next_tag == "DET":
+            marked[i] = (word, "DET_pre")
+    return marked
+
+def _mark_infinitive_pp(tagged):
+    marked = list(tagged)
+
+    for i in range(len(tagged) - 1):
+        word1, tag1 = tagged[i]
+        word2, tag2 = tagged[i + 1]
+
+        if tag1 == "ADP" and tag2 == "VERB_inf":
+            marked[i] = (word1, "ADP_inf")
+            marked[i + 1] = (word2, "VERB_inf")
+
+    return marked
+
 def chunk_type(tagged:list[tuple]) -> list[tuple]:
     """
         Chunker for french : étiquetage syntaxique des chunks
@@ -160,25 +229,32 @@ def chunk_type(tagged:list[tuple]) -> list[tuple]:
     """
     grammar = r"""
         VP :
-            # Temps composés
-            {(<PRON|PRON_cl>?<ADV|ADV_mwe>*<AUX><ADV|ADV_mwe|ADV_neg>*<VERB>)}
-            # Temps simples
-            {<PRON>?<ADV|ADV_mwe>*<PRON_cl>*<ADV|ADV_mwe>*<AUX|VERB><ADV_neg>*}
-            {<PRON|PRON_cl>?<ADV|ADV_mwe>*<VERB><ADV>*}
-            {<AUX|VERB>}
-        # VP : # Groupes verbaux
-        #     {<(PRON|PRON_cl|ADV)*>*<AUX|VERB>} # sinon le VP_cl sont reconnu comme NP+VP + il y a
+            # Temps composés 
+            {(<PRON|PRON_cl>?<ADV_neg>*<PRON_cl>?<AUX>+<ADV_neg|ADV|ADV_mwe>*<VERB><PRON_fixed>?<PRON_cl>?)}
+            # Semi-auxiliaire + infinitif
+            {<PRON|PRON_cl>?<ADV_neg>*<PRON_cl>?<VERB|VERB_inf><ADV_neg|ADV|ADV_mwe>*<VERB|VERB_inf><PRON_cl|PRON_fixed>?}
+            # Temps simples 
+            {<PRON>?<ADV_neg>*<PRON_cl>*<AUX|VERB><ADV_neg>*<PRON_fixed>?<PRON_cl>?}
+            {<PRON|PRON_cl>?<VERB><ADV>*<PRON_cl>?}
+            {<AUX|VERB><PRON_cl>?}
+            {<VERB_inf>}
         NP : # Groupes nominaux 
-            {<(DET|ADV|ADV_mwe|ADV_deg|ADJ|NUM)*>*<(NOUN|PRON|PROPN|PRON_cl)>+<ADJ|NUM>*} # + <NUM><NOUN> -> trente/25 ans
+            {<DET_pre><DET><(NOUN|PRON|PROPN)>+} # tous les ans
+            {<(DET|ADV_deg|ADJ|NUM)*>*<(NOUN|NOUN_mwe|PRON|PROPN|PRON_cl)>+<ADJ|NUM>*} # + <NUM><NOUN> -> trente/25 ans
             {<NUM><SYM>} # 90%
             {<DET><ADJ>} # ces derniers...
             {<NP><CCONJ><NP>}
-        PP : # Groupes prépositionnels
-            {<(ADP|ADP_mwe|SYM_adp)>+<(NP|VP|NUM)>?} # "de mesurer"
+            {<PRON_rel>}
+        PP :
+            {<ADP_inf>+<VERB_inf>+} # "de travailler"
+            {<ADP_inf>+<VP>}   # "de pouvoir travailler"
+            {<(ADP|ADP_mwe|SYM_adp)>+<(NP|NUM)>?}
         AP : # Groupes adjectivaux
-            {<(ADV|ADV_mwe|ADV_deg)>*<(ADJ|ADJ_ap)>+}
+            {<(ADV_deg)>*<(ADJ|ADJ_ap)>+} # adv d'intensité
         ADVP : # Groupes adverbiaux
-            {<(ADV|ADV_mwe|INTJ|ADV_neg)>+}
+            {<ADV_deg>+<ADV>}
+            {<ADV><CONJ><ADV>}
+            {<(ADV|ADV_mwe|INTJ|ADV_neg)>}
         CONJ : # Conjonctions
             {<(CCONJ|SCONJ|SYM_conj)>}
         PUNCT : # Ponctuations
@@ -197,10 +273,14 @@ def chunk_type(tagged:list[tuple]) -> list[tuple]:
         for word, tag in tagged) :
         return []
     
-    tagged = _mark_degree_adv(tagged)
-    tagged = _mark_neg_adv(tagged)
+    tagged = _mark_neg_adv(tagged)    
+    tagged = _mark_degree_adv(tagged) 
+    tagged = _mark_predeterminer(tagged)   
     tagged = _mark_postnominal_coord_adj(tagged)
-    
+    tagged = _clitique_sujet_postpose(tagged)
+    tagged = _pronom_fixed(tagged)
+    tagged = _mark_infinitive_pp(tagged)
+
     chunker = ck.RegexpParser(grammar)
     tree = chunker.parse(tagged)
 
@@ -271,7 +351,7 @@ def is_negative(chunk:str, types:str, nlp=None)->int :
     return neg
 
 
-def chunker(dico:dict, to_df:bool=False, for_sorted:bool=True)-> dict | pd.DataFrame :
+def chunker(dico:dict, nlp=get_nlp(),to_df:bool=False, for_sorted:bool=True)-> dict | pd.DataFrame :
     """
         Prend en entrée un dict comportant obligatoirement :
             - key = pos
@@ -288,7 +368,7 @@ def chunker(dico:dict, to_df:bool=False, for_sorted:bool=True)-> dict | pd.DataF
             tuple(t)
             for t in pos
             if len(t) >= 2
-            and t[1] not in ["<PAUSE>", "<SUPPR>", "<SPACE>", "", " "] # vérifie les tag pos
+            and t[1] not in ["<PAUSE>", "<SUPPR>", "<SPACE>","", " "] # vérifie les tag pos
             and t != (None, None)
             and not (isinstance(t[1], float) and pd.isna(t[1]))
         ]
@@ -326,7 +406,6 @@ def chunker(dico:dict, to_df:bool=False, for_sorted:bool=True)-> dict | pd.DataF
         if is_special or token is None or token in ["", " ", [""], [" "]]:
             # type_chunk = le tag spécial trouvé, sinon pos brut
             type_chunk = next((p for _, p in pos_list if p in special_tags), pos)
-            print(type_chunk)
             result["chunk"] = [("", type_chunk, "O", 0)]
         else :
             ck_total = []
