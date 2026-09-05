@@ -54,16 +54,18 @@
         - fichier JSON structuré par burst, avec les annotations POS
 """
 from read_write import *
-import stanza, torch, re
+import re
 from tqdm import tqdm
 # import argparse
 # import pandas as pd
 
-use_gpu = False
-if torch.cuda.is_available() :
-    use_gpu = True
+def get_nlp():
+    import stanza, torch
+    use_gpu = False
+    if torch.cuda.is_available() :
+        use_gpu = True
 
-nlp = stanza.Pipeline(lang="fr", processors="tokenize, pos, lemma, depparse", use_gpu=use_gpu)
+    return stanza.Pipeline(lang="fr", processors="tokenize, pos, lemma, depparse", use_gpu=use_gpu)
 
 def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_idx:tuple, matches_dict:dict=None, nlp=None) -> tuple[list]:
     """
@@ -92,6 +94,13 @@ def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_i
         stanza_pos = word.pos
         pos = word.pos
         surface = word2token[word.id].text
+
+        if token == "" :
+            idx += 1
+            tok.append(token)
+            origine_pos.append(stanza_pos)
+            postagging.append("<ARTIFACT>")
+            continue
 
         # Adverbes figés : reformer les marques par les adv
         if matches_dict:
@@ -135,8 +144,20 @@ def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_i
                 pos = "DET"
 
         # Ajout d'un détail pour avoir les VP_cl
-        if pos == "PRON" and (word.deprel in ["expl:comp", "expl:pv", "iobj"]) :
+        if pos == "PRON" and (word.deprel in ["expl:comp", "expl:pv", "iobj", "obj"]) :
             pos = "PRON_cl"
+        # Pour les cas: est-ce (-ce = nsubj)
+        if pos == "PRON" and (word.deprel in ["nsubj", "expl:subj"]) and "-" in token : 
+            pos = "PRON_cl"
+
+        # Distinction PRON et PRON_relatif
+        if pos == "PRON" and word.feats and "PronType=Rel" in word.feats :
+            pos = "PRON_rel"
+
+        # Catch verbes à l'infinitif pour traiter les cas :
+        # de mesurer, de pouvoir travailler...
+        if pos == "VERB" and (word.feats == "VerbForm=Inf") :
+            pos = "VERB_inf"
 
         # correction de certain pos=X
         if pos == "X" :
@@ -194,6 +215,8 @@ def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_i
             pos = "AUX"
         if burst_idx in change_2unknow and ((pos == "CCONJ" and token == "ou") or (pos == "LAS" and token == "es")):
             pos = "X"
+        if burst_idx == ("F+S13", np.int64(51)) and (pos == "PRON" and token == "tout") :
+            pos = "ADV"
 
         idx += 1
         tok.append(token)
@@ -203,19 +226,26 @@ def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_i
     return tok, origine_pos, postagging
 
 FIXED_MARKER = "_mwe" # Multiword expression
+
 adv_path = Path(__file__).parent / "ressources" / "adv_fige.txt"
 adp_path = Path(__file__).parent / "ressources" / "adp_fige.txt"
+conj_path = Path(__file__).parent / "ressources" / "conj_fige.txt"
+noun_path = Path(__file__).parent / "ressources" / "noun_fige.txt"
+det_path = Path(__file__).parent / "ressources" / "det_fige.txt"
 
 adv_fige = Path(adv_path).read_text(encoding="utf-8").splitlines()
 adp_fige = Path(adp_path).read_text(encoding="utf-8").splitlines()
+conj_fige = Path(conj_path).read_text(encoding="utf-8").splitlines()
+noun_fige = Path(noun_path).read_text(encoding="utf-8").splitlines()
+det_fige = Path(det_path).read_text(encoding="utf-8").splitlines()
 
-def _build_fixed_expressions(adv: list[str], adp: list[str]) -> list[list[str]]:
+def _build_fixed_expressions(adv: list[str], adp: list[str], conj: list[str], noun: list[str], det:list[str]) -> list[list[str]]:
     return sorted(
-        [expr.strip().lower().split() for expr in adv + adp if expr.strip()],
+        [expr.strip().lower().split() for expr in adv + adp + conj + noun + det if expr.strip()],
         key=len, reverse=True
     )
 
-FIXED_EXPRESSIONS = _build_fixed_expressions(adv_fige, adp_fige)
+FIXED_EXPRESSIONS = _build_fixed_expressions(adv_fige, adp_fige, conj_fige, noun_fige, det_fige)
 
 def match_fixed_expr(matches:list, pos:str, burst:str, idx_burst:tuple, nlp):
     tok = []
@@ -245,7 +275,7 @@ def match_fixed_expr(matches:list, pos:str, burst:str, idx_burst:tuple, nlp):
                 tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, idx_burst, matches_dict=match_dict, nlp=nlp)
     return tok, origine_pos, postagging
 
-def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "pos_stanza", "pos_correction"])->pd.DataFrame :
+def postagging_for_df(dataframe:pd.DataFrame, nlp=get_nlp() ,new_column:list[str] = ["token", "pos_stanza", "pos_correction"])->pd.DataFrame :
     """
         Tokenisation, POStagging with stanza of burst
     """
@@ -275,10 +305,14 @@ def postagging_for_df(dataframe:pd.DataFrame, new_column:list[str] = ["token", "
         origine_pos = []
         postagging = []
 
-        # Gestion des adverbes figés
-        for pos, exprs in (("ADV", adv_fige), ("ADP", adp_fige)):
+        # Gestion des expressions figées
+        for pos, exprs in (("ADV", adv_fige), ("ADP", adp_fige), ("CONJ", conj_fige), ("NOUN", noun_fige), ("DET", det_fige)):
             burst_norm = re.sub(r"\s+", " ", str(burst).lower()).strip()
-            matches = [r for r in exprs if re.sub(r"\s+", " ", r.lower()).strip() in burst_norm]
+            matches = sorted(
+                [r for r in exprs if re.sub(r"\s+", " ", r.lower()).strip() in burst_norm],
+                key=lambda x:len(x.split()),
+                reverse=True
+                )
             if matches:
                 tok, origine_pos, postagging = match_fixed_expr(matches, pos, str(burst), (dataframe["ID"][i], dataframe["n_burst"][i]), nlp)
                 break
