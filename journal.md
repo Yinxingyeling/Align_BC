@@ -1114,6 +1114,9 @@ De plus, un autre problème survient avec ce tag. Dans la partie qui répond à 
 - Analyse par type de burst (P/R/RB)
 - Connaître la configuration des chunks (si VP+NP …) à faire par rapport au type de chunk dans les bursts
 - Pour les chunks multi
+    - calculer le % globale : avec/sans correspondance parfaite (car il y a P)
+    - prendre les chunks et voir le % de burst qui sont des **polichunk** ou **monochunk** ( voir si c’est avec plusieurs chunk )
+    - pour savoir le nombre de chunk non cassé, car dans l’approche actuelle on sait juste qu’il y a des burst avec correspondance mais il existe des cas où il y a à l’intérieur des chunk non cassé mais qui ne sont pas comptabilisé
 
 ## Rédaction (07/07)
 Rédaction du journal de bord : récapitulatif des informations de la réunion dernière et des problèmes/corrections apportés lors des semaines dernières.
@@ -1129,3 +1132,25 @@ Mise au propre du `journal.md` sur github jusqu'à la semaine du 15/06. Ajout d'
 ## Reprise chunker (13/07)
 * Vérification des règles de la syntaxe chunk via les documents envoyés par Mme Taravella
 * Extraire les syntaxes problèmatiques du résultat précédent (fichier csv).
+
+## README.md (27/08)
+Fin de rédaction du manuel d'utilisation dans README.md sur la branche main.
+
+## Journal de bord (28-31/08)
+Rédaction de la suite de journal.md sur la branche doc.
+
+## Correction des règles du chunking (01-04/09)
+* Mise en ligne du brouillon avec les corrections apportées sur les chunks (non daté).
+    <br> [Voir le PDF](Journal_manuscrit.pdf)
+- Le décalage des colonnes à partir de la ligne 1700 est du à la séparation csv par cette ponctuation “;”. à la ligne 1708, cette ponctuation est utilisé mais est reconnu par `to_csv` comme un séparateur.
+- F+S13, np.int64(51)  : tout est reconnu comme PRON or il devrait être ADV et former avec “de même” un ADV_mwe, cependant, l’expression est coupé sur deux bursts, ainsi la reconnaissance a échoué.
+    - Correction manuel pour que tout soit bien annoté
+- “est-ce” pour qu’il soit compté en VP : ajout d’une condition dans `postagging` et mettre une précision pour pas attraper les autres `nsubj` comme “il, elle…” dans les pronoms.
+
+## Correction et rédaction (05/09)
+- Dernière correction dans le chunker
+- Rédaction des conventions
+    - [Convention détaillée](convention_detaille.md) avec la raison des choix faites
+    - [Convention synthétique](convention_chunk.md) avec un exemple par règle
+- Mise en ligne du journal manuscrite (correction sur les règles chunks -- 01-04/09)
+- Ajout d'un [User manuel](user_man.md), qui reprend le README.md de la branche main dans la branche doc.
