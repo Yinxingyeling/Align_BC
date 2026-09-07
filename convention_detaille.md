@@ -26,7 +26,7 @@ La grammaire ne s'appuie pas sur les POS bruts de Stanza mais sur des sous-caté
 | `PRON_fixed` | Pronom figé postposé (ex. dans certaines tournures composées), traité comme un ajout optionnel en fin de `VP`. | — |
 | `PUNCT_FORT` / `PUNCT_FAIBLE` | Distinction demandée dès le début du projet pour différencier ponctuation forte (`.`, `!`, `?`) et faible (`,`, `;`). *(19/05)* | — |
 | `SYM_adp` / `SYM_conj` | Un symbole (`SYM`) reçoit une précision syntaxique **selon sa traduction en langue naturelle** : usage prépositionnel (`/` dans *km/h* = « par ») → `SYM_adp` ; usage conjonctif (`/` dans *et/ou*) → `SYM_conj`. Sans signification claire, le symbole reste `SYM`/`UNKNOWN`. *(Réunion 4 – 18/06, décision détaillée 19/06)* | `/` |
-| `NOUN_mwe`, `VERB_inf` | Noms composés et formes infinitives isolées, nécessaires pour les règles `NP` et `VP`/`PP`. | *pomme de terre*, *partir* |
+| `NOUN_mwe`, `VERB_inf` | Noms composés et formes infinitives isolées, nécessaires pour les règles `NP` et `VP`/`PP`. | *transport en commun*, *partir* |
 | `DET_pre` | Prédéterminant, introduit par `_mark_predeterminer`, placé **avant** un déterminant classique. Distingue *tous* prédéterminant de *tous* pronom, et alimente une règle `NP` dédiée (§3). | *tous*, *toute*, *toutes* (devant un `DET`) |
 
 ## 2. `VP` — Groupe verbal
