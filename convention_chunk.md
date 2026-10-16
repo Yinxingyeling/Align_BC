@@ -18,32 +18,32 @@ A l'intérieur d'un même chunk, les règles sont testés dans l'ordre d'écritu
 
 Les catégories syntaxiques sont représentées entre chevrons :
 
-* \<PRON\> : pronom ;
-* \<DET\> : déterminant ;
-* \<NOUN\> : nom ;
-* \<PROPN\> : nom propre ;
-* \<ADJ\> : adjectif ;
-* \<ADV\> : adverbe ;
-* \<VERB\> : verbe ;
-* \<AUX\> : auxiliaire ;
-* \<ADP\> : adposition/préposition ;
-* \<NUM\> : nombre ;
-* \<PUNCT\> : ponctuation ;
-* \<CCONJ\> : conjonction de coordination ;
-* \<SCONJ\> : conjonction de subordination.
+* <PRON\> : pronom ;
+* <DET\> : déterminant ;
+* <NOUN\> : nom ;
+* <PROPN\> : nom propre ;
+* <ADJ\> : adjectif ;
+* <ADV\> : adverbe ;
+* <VERB\> : verbe ;
+* <AUX\> : auxiliaire ;
+* <ADP\> : adposition/préposition ;
+* <NUM\> : nombre ;
+* <PUNCT\> : ponctuation ;
+* <CCONJ\> : conjonction de coordination ;
+* <SCONJ\> : conjonction de subordination.
 
 Les catégories spécialisées suivent la même convention. Par exemple :
 
-* \<PRON_cl\> : pronom clitique ;
-* \<PRON_fixed\> : pronom à position fixe ;
-* \<VERB_inf\> : verbe à l’infinitif ;
-* \<ADV_neg\> : adverbe de négation ;
-* \<ADV_deg\> : adverbe de degré/intensité ;
-* \<ADV_mwe\> : adverbe appartenant à une expression polylexicale ;
-* \<ADP_inf\> : préposition introduisant un infinitif ;
-* \<ADP_mwe\> : adposition polylexicale ;
-* \<SYM_adp\> : symbole utilisé comme adposition.
-* \<DET_pre\> : prédéterminant
+* <PRON_cl\> : pronom clitique ;
+* <PRON_fixed\> : pronom à position fixe ;
+* <VERB_inf\> : verbe à l’infinitif ;
+* <ADV_neg\> : adverbe de négation ;
+* <ADV_deg\> : adverbe de degré/intensité ;
+* <ADV_mwe\> : adverbe appartenant à une expression polylexicale ;
+* <ADP_inf\> : préposition introduisant un infinitif ;
+* <ADP_mwe\> : adposition polylexicale ;
+* <SYM_adp\> : symbole utilisé comme adposition.
+* <DET_pre\> : prédéterminant
 
 ## Étiquettes chunks
 
