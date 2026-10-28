@@ -516,6 +516,7 @@ def main() :
     process_parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
     process_parser.add_argument("--column", nargs="+", help="Limit which columns were used", default=None)
     process_parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    process_parser.add_argument("--sep", type=str, help="Separation in csvfile", default=",")
     # input()
     process_parser.add_argument("--is-tagged", action=argparse.BooleanOptionalAction, help="True if is postagged")
     process_parser.add_argument("--is-chunked", action=argparse.BooleanOptionalAction, help="True if is chunked")
@@ -532,7 +533,7 @@ def main() :
         if inputpath.suffix[1:] == "json" :
             dico = json_reader(inputpath, "dict")
         else :
-            df = read_corpus(filesFromFolder(inputpath), args.column, args.limit)
+            df = read_corpus(filesFromFolder(inputpath), args.column, args.limit, args.sep)
             dico = df2dict(df)
         
         chunked = chunker(dico)

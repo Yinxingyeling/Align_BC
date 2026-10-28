@@ -202,7 +202,12 @@ def process_words(sentence, tok:list, origine_pos:list, postagging:list, burst_i
             pos = "VERB"
 
         # Correction pour des bursts précis
-        change_ou2adv = {("F+S17", np.int64(45)), ("F+S29", np.int64(76)), ("F-S19", np.int64(11)), ("F-S6", np.int64(42)), ("F-S9", np.int64(23)), ("P+S20", np.int64(39)), ("P-S19", np.int64(48)), ("P-S19", np.int64(57)), ("P-S24", np.int64(12)), ("P-S8", np.int64(63)), ("R+S3", np.int64(73)), ("R+S3", np.int64(75)), ("R+S3", np.int64(125)), ("R+S4", np.int64(54)), ("R-S10", np.int64(104)), ("R-S6", np.int64(1)), ("R-S7", np.int64(96))}
+        change_ou2adv = {("F+S17", np.int64(45)), ("F+S29", np.int64(76)), ("F-S19", np.int64(11)), 
+                         ("F-S6", np.int64(42)), ("F-S9", np.int64(23)), ("P+S20", np.int64(39)), 
+                         ("P-S19", np.int64(48)), ("P-S19", np.int64(57)), ("P-S24", np.int64(12)), 
+                         ("P-S8", np.int64(63)), ("R+S3", np.int64(73)), ("R+S3", np.int64(75)), 
+                         ("R+S3", np.int64(125)), ("R+S4", np.int64(54)), ("R-S10", np.int64(104)), 
+                         ("R-S6", np.int64(1)), ("R-S7", np.int64(96))}
         change_ou2cconj = {("F+S1", np.int64(4)), ("P-S21", np.int64(54)), ("R-S20", np.int64(17))}
         change_es2verb = {("F+S19", np.int64(52)), ("F-S11", np.int64(15)), ("F-S28", np.int64(82))} # 4237 et 10534 sont des corrections
         change_2unknow = {("F-S17", np.int64(38)), ("R+S9", np.int64(60)), ("F+S5", np.int64(28))}
@@ -272,7 +277,8 @@ def match_fixed_expr(matches:list, pos:str, burst:str, idx_burst:tuple, nlp):
         else :
             doc_part = nlp(part.strip())
             for sentence in doc_part.sentences :
-                tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, idx_burst, matches_dict=match_dict, nlp=nlp)
+                tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, 
+                                                             idx_burst, matches_dict=match_dict, nlp=nlp)
     return tok, origine_pos, postagging
 
 def postagging_for_df(dataframe:pd.DataFrame, nlp=get_nlp() ,new_column:list[str] = ["token", "pos_stanza", "pos_correction"])->pd.DataFrame :
@@ -314,13 +320,17 @@ def postagging_for_df(dataframe:pd.DataFrame, nlp=get_nlp() ,new_column:list[str
                 reverse=True
                 )
             if matches:
-                tok, origine_pos, postagging = match_fixed_expr(matches, pos, str(burst), (dataframe["ID"][i], dataframe["n_burst"][i]), nlp)
+                tok, origine_pos, postagging = match_fixed_expr(matches, pos, str(burst), 
+                                                                (dataframe["ID"][i], dataframe["n_burst"][i]), 
+                                                                nlp)
                 break
         else :
             adv_dict = {}
             doc = nlp(str(burst))
             for sentence in doc.sentences :
-                tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, (dataframe["ID"][i], dataframe["n_burst"][i]), matches_dict=adv_dict, nlp=nlp)
+                tok, origine_pos, postagging = process_words(sentence, tok, origine_pos, postagging, 
+                                                             (dataframe["ID"][i], dataframe["n_burst"][i]), 
+                                                             matches_dict=adv_dict, nlp=nlp)
 
         data = {
             "token" : tok,
@@ -393,6 +403,8 @@ def main() :
     parser.add_argument("-f", "--format", choices=["json", "excel", "csv"], help="Format to save")
     parser.add_argument("--column", nargs="+", help="Limit which columns were used", default=None)
     parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    parser.add_argument("--sep", type=str, help="Separation in csvfile", default=",")
+
     # input()
     parser.add_argument("--is-tagged", action=argparse.BooleanOptionalAction, help="True if is postagged")
     parser.add_argument("--is-chunked", action=argparse.BooleanOptionalAction, help="True if is chunked")
@@ -401,7 +413,7 @@ def main() :
     if args.inputpath.suffix[1:] == ".json" :
         df = json_reader(args.inputpath, "df")
     else :
-        df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
+        df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit, args.sep)
     postagged_df = postagging_for_df(df)
 
     if args.outputfile : 

@@ -90,11 +90,11 @@ def filesFromFolder(foldername:str)->dict[str,list[str]] :
 
     return dict(results)
     
-def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]|None=None, limit:None|int=None)-> pd.DataFrame :
+def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]|None=None, limit:None|int=None, sep:str=",")-> pd.DataFrame :
     """
         Extrait les données selon les colonnes voulues du fichier csv ou excel
         - column = "all" # prend en compte toutes les colonnes
-        - column = ["burst", "categ"] # ne prend que les burst et catégories de pause
+        - column = ["burst", "categ"] # ne prend que les burst et catégories de pause   
 
         Pandas for excel used openpyxl, make sure you have installed !
     """
@@ -108,7 +108,7 @@ def read_corpus(ext_files:dict[str, list[str]], column:str|list[str]|None=None, 
             if ext == ".xlsx" :
                 corpus = pd.read_excel(file, header=1)
             elif ext == ".csv" :
-                corpus = pd.read_csv(file)
+                corpus = pd.read_csv(file, sep=sep)
             else : 
                 print(f"Unsupported format : {ext}")
                 continue
@@ -290,13 +290,14 @@ def main() :
     parser.add_argument("--json-reader", choices=["df", "dict"], help="To read json file")
     parser.add_argument("--column", nargs="+", help="Limit which columns were used", default=None)
     parser.add_argument("--limit", type=int, help="Limit lines to process", default=None)
+    parser.add_argument("--sep", type=str, help="Separation in csvfile", default=",")
     # Mettre en input()
     parser.add_argument("--is-tagged", action=argparse.BooleanOptionalAction, help="True if is postagged")
     parser.add_argument("--is-chunked", action=argparse.BooleanOptionalAction, help="True if is chunked")
 
     args = parser.parse_args()
 
-    df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit)
+    df = read_corpus(filesFromFolder(Path(args.path)), args.column, args.limit, args.sep)
 
     # Affichage
     if args.json_reader :
