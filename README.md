@@ -25,7 +25,11 @@ Align_BC/
 │   ├── read_write.py       # lecture, conversion et export des corpus
 │   ├── tok_pos.py          # tokenisation et POS tagging (Stanza)
 │   ├── chunker_fr.py       # chunking syntaxique et étiquettes BILOU (NLTK)
-│   └── ressources/         # listes d'adverbes/adpositions figés
+│   ├── ressources/         # listes d'adverbes/adpositions/noms/verbes figés
+|   └── evaluation/         # évaluation du chunker et son analyse (marimo)
+├── convention_chunk.md
+├── convention_detaille.md
+├── evaluation_detail.html  # analyse de l'évaluation du chunker au format html
 └── README.md
 ```
 
@@ -103,6 +107,9 @@ Information
 Stage réalisé dans le cadre du projet [Pro-TEXT](https://pro-text.huma-num.fr/).
 
 > Bouriga, S., & Olive, T. (2020). The Pro-TEXT French Adult Sub-corpus of keystroke logs and final texts. Pro-TEXT: Le processus de textualisation. <br> https://pro-text.huma-num.fr/ressources/
+
+Utilisation de Stanza :
+> Peng Qi, Yuhao Zhang, Yuhui Zhang, Jason Bolton and Christopher D. Manning. 2020. Stanza: A Python Natural Language Processing Toolkit for Many Human Languages. In Association for Computational Linguistics (ACL) System Demonstrations. 2020.
 
 Licence
 -
